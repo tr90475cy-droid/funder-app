@@ -1,0 +1,29 @@
+{% extends "base.html" %}
+{% block title %}Admin Unlock{% endblock %}
+{% block content %}
+
+<div class="center-wrap">
+  <div class="card">
+    <div class="brand-row">
+      <div class="brand-mark">F</div>
+      <div>
+        <div class="brand-name">Fundar</div>
+        <div class="brand-sub">Admin access</div>
+      </div>
+    </div>
+
+    <h1>Admin <em>unlock</em></h1>
+    <p class="sub">Enter your admin key to continue.</p>
+
+    <form method="POST" action="{{ url_for('admin_unlock') }}">
+      <div class="field">
+        <label for="admin_key">Admin key</label>
+        <input type="password" id="admin_key" name="admin_key"
+               placeholder="••••••••" required autofocus autocomplete="off">
+      </div>
+      <button type="submit" class="btn btn-primary btn-block">Unlock</button>
+    </form>
+  </div>
+</div>
+
+{% endblock %}

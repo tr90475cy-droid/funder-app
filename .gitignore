@@ -1,0 +1,6 @@
+venv/
+__pycache__/
+*.pyc
+fundar.db
+uploads/
+.env

@@ -1,0 +1,77 @@
+{% extends "base.html" %}
+{% block title %}Marketplace{% endblock %}
+{% block content %}
+
+<div class="app">
+  <header class="header">
+    <div class="header-brand">
+      <a href="{{ url_for('home') }}" class="icon-btn" aria-label="Back">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="m15 18-6-6 6-6"/></svg>
+      </a>
+      <div class="header-brand-text">
+        <div class="header-brand-name">Marketplace</div>
+        <div class="header-brand-sub">Lead City University</div>
+      </div>
+    </div>
+    <button class="btn btn-primary btn-sm" id="newListingBtn">+ Sell</button>
+  </header>
+
+  <div class="chips" id="marketChips">
+    <button class="chip active" data-cat="all">All</button>
+    <button class="chip" data-cat="books">📚 Books</button>
+    <button class="chip" data-cat="electronics">💻 Electronics</button>
+    <button class="chip" data-cat="furniture">🪑 Furniture</button>
+    <button class="chip" data-cat="services">🛠 Services</button>
+    <button class="chip" data-cat="other">📦 Other</button>
+  </div>
+
+  <div class="section-label">Campus <em>market</em></div>
+  <div class="market-grid" id="marketGrid">
+    <div class="empty">Loading listings…</div>
+  </div>
+</div>
+
+<!-- New Listing modal -->
+<div class="modal-back" id="listingModal">
+  <div class="modal">
+    <div class="modal-head">
+      <button class="modal-close" id="listingClose">✕</button>
+      <div class="modal-title">New Listing</div>
+      <button class="post-btn" id="listingPost" disabled>Post</button>
+    </div>
+
+    <form id="listingForm">
+      <div class="field">
+        <label>Title</label>
+        <input type="text" name="title" placeholder="e.g. ICAN Accounting Study Text" required>
+      </div>
+      <div class="field">
+        <label>Price (₦)</label>
+        <input type="number" name="price" placeholder="4500" required min="0">
+      </div>
+      <div class="field">
+        <label>Category</label>
+        <select name="category" required>
+          <option value="books">Books</option>
+          <option value="electronics">Electronics</option>
+          <option value="furniture">Furniture</option>
+          <option value="services">Services</option>
+          <option value="other">Other</option>
+        </select>
+      </div>
+      <div class="field">
+        <label>Description</label>
+        <textarea name="description" placeholder="Condition, pickup location, etc."></textarea>
+      </div>
+      <div class="field">
+        <label>Photo (optional)</label>
+        <input type="file" name="image" accept="image/*">
+      </div>
+    </form>
+  </div>
+</div>
+
+{% endblock %}
+{% block scripts %}
+<script src="{{ url_for('static', filename='js/market.js') }}"></script>
+{% endblock %}

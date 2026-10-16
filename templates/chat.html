@@ -1,0 +1,137 @@
+{% extends "base.html" %}
+{% block title %}Chat{% endblock %}
+{% block content %}
+
+<div class="chat-app">
+
+  <!-- ═══════════════════════════════════════
+       SCREEN 1 — ROOM LIST
+       ═══════════════════════════════════════ -->
+  <section class="chat-screen" id="screenRooms">
+
+    <header class="chat-topbar">
+      <a href="{{ url_for('home') }}" class="icon-btn" aria-label="Back to home">
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+          <path d="m15 18-6-6 6-6"/>
+        </svg>
+      </a>
+
+      <div class="chat-topbar-title">
+        <div class="chat-topbar-name">Chats</div>
+        <div class="chat-topbar-sub">Lead City University</div>
+      </div>
+
+      <div class="chat-topbar-actions">
+        <button class="icon-btn" id="searchToggleBtn" aria-label="Search">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+            <circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/>
+          </svg>
+        </button>
+        <button class="icon-btn" id="newGroupBtn" aria-label="New group">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/>
+            <circle cx="9" cy="7" r="4"/>
+            <path d="M22 21v-2a4 4 0 0 0-3-3.87"/>
+            <path d="M16 3.13a4 4 0 0 1 0 7.75"/>
+          </svg>
+        </button>
+      </div>
+    </header>
+
+    <!-- Search -->
+    <div class="chat-search hidden" id="searchBar">
+      <div class="chat-search-input-wrap">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+          <circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/>
+        </svg>
+        <input type="text" id="searchInput" placeholder="Search by name or email…" autocomplete="off">
+        <button class="chat-search-close" id="searchCloseBtn" aria-label="Close">✕</button>
+      </div>
+      <div class="chat-search-results hidden" id="searchResults"></div>
+    </div>
+
+    <div class="chat-rooms-list" id="roomList">
+      <div class="empty">Loading chats…</div>
+    </div>
+
+    <button class="chat-fab" id="startNewBtn" aria-label="Start new chat">
+      <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round">
+        <path d="M12 5v14M5 12h14"/>
+      </svg>
+    </button>
+
+  </section>
+
+  <!-- ═══════════════════════════════════════
+       SCREEN 2 — CONVERSATION
+       ═══════════════════════════════════════ -->
+  <section class="chat-screen hidden" id="screenConvo">
+
+    <header class="chat-topbar">
+      <button class="icon-btn" id="convoBackBtn" aria-label="Back to chats">
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+          <path d="m15 18-6-6 6-6"/>
+        </svg>
+      </button>
+
+      <div class="chat-peer" id="peerInfo">
+        <div class="chat-peer-avatar" id="chatPeerAvatar"></div>
+        <div class="chat-peer-text">
+          <div class="chat-topbar-name" id="chatTitle">Chat</div>
+          <div class="chat-topbar-sub" id="chatSubtitle">Direct message</div>
+        </div>
+      </div>
+
+      <div class="chat-topbar-actions"></div>
+    </header>
+
+    <div class="chat-messages" id="chatMessages">
+      <div class="empty">Loading…</div>
+    </div>
+
+    <form class="chat-composer" id="chatComposer" onsubmit="return false;">
+      <input
+        type="text"
+        id="chatInput"
+        placeholder="Type a message…"
+        autocomplete="off"
+        maxlength="2000"
+      >
+      <button type="button" class="chat-send-btn" id="chatSend" aria-label="Send">
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+          <path d="m22 2-7 20-4-9-9-4Z"/>
+          <path d="M22 2 11 13"/>
+        </svg>
+      </button>
+    </form>
+
+  </section>
+
+</div>
+
+<!-- ═══════════════════════════════════════
+     NEW GROUP MODAL
+     ═══════════════════════════════════════ -->
+<div class="modal-back" id="newGroupModal">
+  <div class="modal">
+    <div class="modal-head">
+      <button class="modal-close" id="newGroupClose">✕</button>
+      <div class="modal-title">New Group</div>
+      <button class="post-btn" id="newGroupCreate">Create</button>
+    </div>
+    <div class="field">
+      <label>Group name</label>
+      <input type="text" id="newGroupName" placeholder="e.g. CSC 301 Study Group">
+    </div>
+    <div class="field">
+      <label>Select members</label>
+      <div class="user-picker" id="groupUserPicker"></div>
+    </div>
+  </div>
+</div>
+
+{% endblock %}
+{% block scripts %}
+<script src="https://cdn.socket.io/4.7.2/socket.io.min.js"></script>
+<script src="{{ url_for('static', filename='js/chat.js') }}"></script>
+{% endblock %}

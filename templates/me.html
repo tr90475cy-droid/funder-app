@@ -1,0 +1,147 @@
+{% extends "base.html" %}
+{% block title %}Profile{% endblock %}
+{% block content %}
+
+<div class="app">
+
+  <header class="header">
+    <div class="header-brand">
+      <a href="{{ url_for('home') }}" class="icon-btn" aria-label="Back">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="m15 18-6-6 6-6"/></svg>
+      </a>
+      <div class="header-brand-text">
+        <div class="header-brand-name">Profile</div>
+        <div class="header-brand-sub">Lead City University</div>
+      </div>
+    </div>
+    <a href="{{ url_for('logout') }}" class="icon-btn" aria-label="Sign out">
+      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" y1="12" x2="9" y2="12"/></svg>
+    </a>
+  </header>
+
+  <!-- ═══════════ PROFILE HERO ═══════════ -->
+  <div class="profile-hero">
+
+    <div class="profile-avatar-wrap">
+      {% if avatar %}
+        <img class="profile-avatar" src="{{ avatar }}" alt="" id="profileAvatarImg">
+      {% else %}
+        <div class="profile-avatar profile-avatar-blank" id="profileAvatarImg"></div>
+      {% endif %}
+
+      <label class="profile-avatar-edit" for="avatarFile" aria-label="Change picture">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <path d="M12 20h9"/>
+          <path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4Z"/>
+        </svg>
+      </label>
+      <input type="file" id="avatarFile" accept="image/*" hidden>
+
+      {% if avatar %}
+        <button class="profile-avatar-remove" id="avatarRemove" aria-label="Remove picture">✕</button>
+      {% endif %}
+    </div>
+
+    <h2 class="profile-name">{{ user.full_name }}</h2>
+    <p class="profile-bio" id="profileBio">{{ user.bio or 'No bio yet.' }}</p>
+
+    {% if verification %}
+      <div class="profile-tags">
+        <span class="tag tag-verified">✓ Verified</span>
+        <span class="tag tag-pending">{{ verification.level }}L</span>
+      </div>
+    {% endif %}
+
+    <div class="profile-stats">
+      <button class="profile-stat-btn" data-tab="posts">
+        <div class="stat-num">{{ post_count }}</div>
+        <div class="stat-label">Posts</div>
+      </button>
+      <button class="profile-stat-btn" data-tab="followers" id="statFollowers">
+        <div class="stat-num" id="followersCount">0</div>
+        <div class="stat-label">Followers</div>
+      </button>
+      <button class="profile-stat-btn" data-tab="following" id="statFollowing">
+        <div class="stat-num" id="followingCount">0</div>
+        <div class="stat-label">Following</div>
+      </button>
+    </div>
+
+    <div class="profile-actions">
+      <button class="btn btn-ghost btn-sm" id="editProfileBtn">Edit profile</button>
+      <a href="{{ url_for('connect') }}" class="btn btn-ghost btn-sm">Find friends</a>
+    </div>
+  </div>
+
+  <!-- ═══════════ VERIFICATION DETAILS ═══════════ -->
+  {% if verification %}
+    <div class="detail-list profile-details">
+      <div class="row"><span>Matric</span><span>{{ verification.matric_no }}</span></div>
+      <div class="row"><span>Faculty</span><span>{{ verification.faculty }}</span></div>
+      <div class="row"><span>Department</span><span>{{ verification.department }}</span></div>
+      <div class="row"><span>Level</span><span>{{ verification.level }}L</span></div>
+      <div class="row"><span>Admission Year</span><span>{{ verification.admission_year }}</span></div>
+    </div>
+  {% endif %}
+
+  <!-- ═══════════ TABS ═══════════ -->
+  <div class="chips profile-tabs" id="profileTabs">
+    <button class="chip active" data-tab="posts">My Posts</button>
+    <button class="chip" data-tab="followers">Followers</button>
+    <button class="chip" data-tab="following">Following</button>
+  </div>
+
+  <!-- ═══════════ PANEL: MY POSTS ═══════════ -->
+  <section class="profile-panel" id="panelPosts">
+    <div class="feed" id="myPosts">
+      <div class="empty">Loading…</div>
+    </div>
+  </section>
+
+  <!-- ═══════════ PANEL: FOLLOWERS ═══════════ -->
+  <section class="profile-panel hidden" id="panelFollowers">
+    <div class="connect-list" id="followersList">
+      <div class="empty">Loading…</div>
+    </div>
+  </section>
+
+  <!-- ═══════════ PANEL: FOLLOWING ═══════════ -->
+  <section class="profile-panel hidden" id="panelFollowing">
+    <div class="connect-list" id="followingList">
+      <div class="empty">Loading…</div>
+    </div>
+  </section>
+
+</div>
+
+<!-- ═══════════ EDIT PROFILE MODAL ═══════════ -->
+<div class="modal-back" id="editProfileModal">
+  <div class="modal">
+    <div class="modal-head">
+      <button class="modal-close" id="editProfileClose">✕</button>
+      <div class="modal-title">Edit profile</div>
+      <button class="post-btn" id="editProfileSave">Save</button>
+    </div>
+    <div class="field">
+      <label>Full name</label>
+      <input type="text" id="editName" value="{{ user.full_name }}" maxlength="120">
+    </div>
+    <div class="field">
+      <label>Bio</label>
+      <textarea id="editBio" maxlength="200" placeholder="Tell the campus who you are…">{{ user.bio or '' }}</textarea>
+    </div>
+  </div>
+</div>
+
+<div class="privacy-banner">
+  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+    <rect x="3" y="11" width="18" height="11" rx="2"/>
+    <path d="M7 11V7a5 5 0 0 1 10 0v4"/>
+  </svg>
+  <span>Your matric, phone, email and admission year are private — only you can see them.</span>
+</div>
+
+{% endblock %}
+{% block scripts %}
+<script src="{{ url_for('static', filename='js/me.js') }}"></script>
+{% endblock %}

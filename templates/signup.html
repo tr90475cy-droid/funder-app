@@ -1,0 +1,91 @@
+{% extends "base.html" %}
+
+{% block title %}Sign Up{% endblock %}
+
+{% block content %}
+
+<div class="center-wrap">
+  <div class="card card-wide">
+
+    <div class="brand-row">
+      <div class="brand-mark">F</div>
+      <div>
+        <div class="brand-name">Fundar</div>
+        <div class="brand-sub">Lead City University</div>
+      </div>
+    </div>
+
+    <h1>Join the <em>community</em></h1>
+    <p class="sub">Create your account — you'll verify as a student next.</p>
+
+    <form method="POST" action="{{ url_for('signup') }}">
+      <div class="field">
+        <label for="full_name">Full name</label>
+        <input type="text" id="full_name" name="full_name" value="{{ form.full_name or '' }}" placeholder="e.g. Tolu Adeyemi" required autofocus maxlength="120">
+      </div>
+
+      <div class="field">
+        <label for="email">Email</label>
+        <input type="email" id="email" name="email" value="{{ form.email or '' }}" placeholder="you@email.com" required>
+      </div>
+
+      <div class="field">
+        <label for="phone">Phone <span class="text-muted">(optional)</span></label>
+        <input type="tel" id="phone" name="phone" value="{{ form.phone or '' }}" placeholder="0803 000 0000" maxlength="20">
+      </div>
+
+      <div class="grid-2">
+        <div class="field">
+          <label for="password">Password</label>
+          <div class="password-wrap">
+            <input type="password" id="password" name="password" placeholder="min 6 chars" required minlength="6">
+            <button type="button" class="password-toggle" data-target="password" aria-label="Show password">
+              <svg class="icon-eye" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <path d="M2 12s3-7 10-7 10 7 10 7-3 7-10 7-10-7-10-7Z"/>
+                <circle cx="12" cy="12" r="3"/>
+              </svg>
+              <svg class="icon-eye-off hidden" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <path d="M9.88 9.88a3 3 0 1 0 4.24 4.24"/>
+                <path d="M10.73 5.08A10.43 10.43 0 0 1 12 5c7 0 10 7 10 7a13.16 13.16 0 0 1-1.67 2.68"/>
+                <path d="M6.61 6.61A13.526 13.526 0 0 0 2 12s3 7 10 7a9.74 9.74 0 0 0 5.39-1.61"/>
+                <line x1="2" y1="2" x2="22" y2="22"/>
+              </svg>
+            </button>
+          </div>
+        </div>
+
+        <div class="field">
+          <label for="confirm">Confirm</label>
+          <div class="password-wrap">
+            <input type="password" id="confirm" name="confirm" placeholder="repeat password" required minlength="6">
+            <button type="button" class="password-toggle" data-target="confirm" aria-label="Show password">
+              <svg class="icon-eye" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <path d="M2 12s3-7 10-7 10 7 10 7-3 7-10 7-10-7-10-7Z"/>
+                <circle cx="12" cy="12" r="3"/>
+              </svg>
+              <svg class="icon-eye-off hidden" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <path d="M9.88 9.88a3 3 0 1 0 4.24 4.24"/>
+                <path d="M10.73 5.08A10.43 10.43 0 0 1 12 5c7 0 10 7 10 7a13.16 13.16 0 0 1-1.67 2.68"/>
+                <path d="M6.61 6.61A13.526 13.526 0 0 0 2 12s3 7 10 7a9.74 9.74 0 0 0 5.39-1.61"/>
+                <line x1="2" y1="2" x2="22" y2="22"/>
+              </svg>
+            </button>
+          </div>
+        </div>
+      </div>
+
+      <button type="submit" class="btn btn-primary btn-block">Continue</button>
+    </form>
+
+    <p class="card-footer">
+      Already have an account? <a href="{{ url_for('login') }}">Sign in</a>
+    </p>
+
+  </div>
+</div>
+
+{% endblock %}
+
+{% block scripts %}
+<script src="{{ url_for('static', filename='js/auth.js') }}"></script>
+{% endblock %}

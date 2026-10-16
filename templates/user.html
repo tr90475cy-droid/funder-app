@@ -1,0 +1,175 @@
+{% extends "base.html" %}
+{% block title %}{{ user.full_name }}{% endblock %}
+{% block content %}
+
+<div class="app">
+
+  <header class="header">
+    <div class="header-brand">
+      <a href="{{ url_for('home') }}" class="icon-btn" aria-label="Back">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="m15 18-6-6 6-6"/></svg>
+      </a>
+      <div class="header-brand-text">
+        <div class="header-brand-name">{{ user.full_name.split(' ')[0] }}'s profile</div>
+        <div class="header-brand-sub">Lead City University</div>
+      </div>
+    </div>
+  </header>
+
+  <!-- ═══════════ PROFILE HERO ═══════════ -->
+  <div class="profile-hero">
+    <div class="profile-avatar-wrap">
+      {% if avatar %}
+        <img class="profile-avatar" src="{{ avatar }}" alt="">
+      {% else %}
+        <div class="profile-avatar profile-avatar-blank"></div>
+      {% endif %}
+    </div>
+
+    <h2 class="profile-name">{{ user.full_name }}</h2>
+
+    {% if user.bio %}
+      <p class="profile-bio">{{ user.bio }}</p>
+    {% else %}
+      <p class="profile-bio text-muted">No bio yet.</p>
+    {% endif %}
+
+    <div class="profile-tags">
+      <span class="tag tag-verified">✓ Verified</span>
+      {% if public_info.level %}
+        <span class="tag tag-pending">{{ public_info.level }}L</span>
+      {% endif %}
+    </div>
+
+    <div class="profile-stats">
+      <div class="profile-stat-btn">
+        <div class="stat-num">{{ post_count }}</div>
+        <div class="stat-label">Posts</div>
+      </div>
+      <div class="profile-stat-btn">
+        <div class="stat-num" id="followerCount">{{ follower_count }}</div>
+        <div class="stat-label">Followers</div>
+      </div>
+      <div class="profile-stat-btn">
+        <div class="stat-num">{{ following_count }}</div>
+        <div class="stat-label">Following</div>
+      </div>
+    </div>
+
+    <div class="profile-actions">
+      <button class="btn {% if is_following %}btn-ghost{% else %}btn-primary{% endif %} btn-sm"
+              id="followBtn"
+              data-uid="{{ user.id }}"
+              data-following="{{ 'true' if is_following else 'false' }}">
+        {% if is_following %}Following{% else %}Follow{% endif %}
+      </button>
+      <button class="btn btn-ghost btn-sm" id="messageBtn" data-uid="{{ user.id }}">Message</button>
+    </div>
+  </div>
+
+  <!-- ═══════════ PUBLIC DETAILS ONLY ═══════════ -->
+  {% if public_info.department or public_info.faculty or public_info.level %}
+    <div class="detail-list profile-details">
+      {% if public_info.faculty %}
+        <div class="row"><span>Faculty</span><span>{{ public_info.faculty }}</span></div>
+      {% endif %}
+      {% if public_info.department %}
+        <div class="row"><span>Department</span><span>{{ public_info.department }}</span></div>
+      {% endif %}
+      {% if public_info.level %}
+        <div class="row"><span>Level</span><span>{{ public_info.level }}L</span></div>
+      {% endif %}
+    </div>
+  {% endif %}
+
+  <!-- ═══════════ THEIR POSTS ═══════════ -->
+  <div class="section-label">Their <em>posts</em></div>
+  <div class="feed" id="userPosts">
+    <div class="empty">Loading…</div>
+  </div>
+
+</div>
+
+{% endblock %}
+
+{% block scripts %}
+<script>
+  (function () {
+    const followBtn = document.getElementById('followBtn');
+    const messageBtn = document.getElementById('messageBtn');
+    const postsEl = document.getElementById('userPosts');
+    const followerCount = document.getElementById('followerCount');
+    const uid = followBtn.dataset.uid;
+
+    function esc(s) {
+      return String(s == null ? '' : s).replace(/[&<>"']/g, m => ({
+        '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;'
+      }[m]));
+    }
+
+    // Follow / unfollow
+    followBtn.addEventListener('click', async () => {
+      const following = followBtn.dataset.following === 'true';
+      const method = following ? 'DELETE' : 'POST';
+      followBtn.disabled = true;
+      try {
+        const r = await fetch('/api/users/' + uid + '/follow', { method });
+        const data = await r.json();
+        followBtn.dataset.following = data.following ? 'true' : 'false';
+        followBtn.textContent = data.following ? 'Following' : 'Follow';
+        followBtn.classList.toggle('btn-primary', !data.following);
+        followBtn.classList.toggle('btn-ghost', data.following);
+        followerCount.textContent = data.followers;
+      } finally {
+        followBtn.disabled = false;
+      }
+    });
+
+    // Message
+    messageBtn.addEventListener('click', async () => {
+      await fetch('/api/chat/dm/' + uid, { method: 'POST' });
+      window.location.href = '/chat?dm=' + uid;
+    });
+
+    // Load their posts
+    async function loadPosts() {
+      try {
+        const r = await fetch('/api/user/' + uid + '/posts');
+        const posts = await r.json();
+        if (!posts.length) {
+          postsEl.innerHTML = '<div class="empty">No posts yet.</div>';
+          return;
+        }
+        postsEl.innerHTML = posts.map(p => {
+          const avatar = p.avatar
+            ? '<img class="avatar" src="' + esc(p.avatar) + '" alt="">'
+            : '<div class="avatar avatar-blank"></div>';
+          return ''
+            + '<article class="post">'
+            +   '<div class="post-head">'
+            +     avatar
+            +     '<div class="post-meta">'
+            +       '<div class="post-name-row">'
+            +         '<span class="post-name">' + esc(p.author) + '</span>'
+            +         (p.verified ? '<span class="verified">✓</span>' : '')
+            +       '</div>'
+            +       '<div class="post-time">' + esc(p.time) + ' ago</div>'
+            +     '</div>'
+            +   '</div>'
+            +   '<p class="post-body">' + esc(p.content) + '</p>'
+            +   (p.image ? '<img class="post-img" src="' + esc(p.image) + '" alt="">' : '')
+            +   '<div class="post-actions">'
+            +     '<div class="act">❤️ <span>' + p.likes + '</span></div>'
+            +     '<div class="act">💬 <span>' + p.comments + '</span></div>'
+            +   '</div>'
+            + '</article>';
+        }).join('');
+      } catch {
+        postsEl.innerHTML = '<div class="empty">Could not load posts.</div>';
+      }
+    }
+
+    loadPosts();
+  })();
+</script>
+{% endblock %}

@@ -1,0 +1,199 @@
+import os
+import json
+import base64
+import requests
+from PIL import Image
+from PIL.ExifTags import TAGS
+
+
+# ─────────────────────────────────────────────
+# Configuration
+# ─────────────────────────────────────────────
+AI_PROVIDER = os.environ.get('AI_PROVIDER', 'heuristic')  # 'hive' | 'zerotrue' | 'heuristic'
+HIVE_API_KEY = os.environ.get('HIVE_API_KEY', '')
+ZEROTRUE_API_KEY = os.environ.get('ZEROTRUE_API_KEY', '')
+
+
+# ─────────────────────────────────────────────
+# Public entry point
+# ─────────────────────────────────────────────
+def analyze_image(file_path):
+    """
+    Returns (score, flags).
+      score: 0 (definitely real) → 100 (definitely AI)
+      flags: list of human-readable reasons
+    """
+    # Try real provider first if configured
+    if AI_PROVIDER == 'hive' and HIVE_API_KEY:
+        try:
+            return _hive_check(file_path)
+        except Exception as e:
+            print(f'[AI] Hive failed, falling back: {e}')
+
+    if AI_PROVIDER == 'zerotrue' and ZEROTRUE_API_KEY:
+        try:
+            return _zerotrue_check(file_path)
+        except Exception as e:
+            print(f'[AI] ZeroTrue failed, falling back: {e}')
+
+    # Heuristic fallback
+    return _heuristic_check(file_path)
+
+
+# ─────────────────────────────────────────────
+# Real provider: Hive AI
+# Docs: https://docs.thehive.ai/reference/ai-generated-media-detection
+# ─────────────────────────────────────────────
+def _hive_check(file_path):
+    with open(file_path, 'rb') as f:
+        b64 = base64.b64encode(f.read()).decode('utf-8')
+
+    res = requests.post(
+        'https://api.thehive.ai/api/v2/task/sync',
+        headers={
+            'Authorization': f'Token {HIVE_API_KEY}',
+            'Content-Type': 'application/json',
+        },
+        json={
+            'input': [{'media_type': 'image', 'data': b64}],
+        },
+        timeout=20,
+    )
+    res.raise_for_status()
+    data = res.json()
+
+    # Find the AI-generated class
+    score = 0
+    flags = []
+    try:
+        classes = data['status'][0]['response']['output'][0]['classes']
+        for c in classes:
+            if 'ai' in c.get('class', '').lower() or 'generated' in c.get('class', '').lower():
+                score = int(float(c['score']) * 100)
+                flags.append(f"Hive AI: {c['class']} ({score}%)")
+                break
+    except (KeyError, IndexError, TypeError) as e:
+        flags.append(f'Hive response parse warning: {e}')
+
+    if not flags:
+        flags.append('Hive AI: no AI indicators detected')
+    return score, flags
+
+
+# ─────────────────────────────────────────────
+# Real provider: ZeroTrue
+# Docs: https://docs.zerotrue.com
+# ─────────────────────────────────────────────
+def _zerotrue_check(file_path):
+    with open(file_path, 'rb') as f:
+        b64 = base64.b64encode(f.read()).decode('utf-8')
+
+    res = requests.post(
+        'https://api.zerotrue.com/v1/checks',
+        headers={
+            'Authorization': f'Bearer {ZEROTRUE_API_KEY}',
+            'Content-Type': 'application/json',
+        },
+        json={
+            'media_type': 'image',
+            'data': b64,
+            'is_private_scan': True,
+        },
+        timeout=25,
+    )
+    res.raise_for_status()
+    data = res.json()
+
+    ai_prob = data.get('ai_probability', 0)
+    score = int(ai_prob)
+    flags = [f'ZeroTrue: {data.get("result_type", "unknown")} ({score}%)']
+    return score, flags
+
+
+# ─────────────────────────────────────────────
+# Heuristic (offline) — works with no API key
+# ─────────────────────────────────────────────
+def _heuristic_check(file_path):
+    flags = []
+    score = 0
+
+    if not os.path.exists(file_path):
+        return 0, ['File not found']
+
+    ext = file_path.lower().rsplit('.', 1)[-1]
+
+    if ext == 'pdf':
+        return 20, ['PDF document — manual visual review recommended']
+
+    try:
+        img = Image.open(file_path)
+    except Exception as e:
+        return 50, [f'Could not open image: {e}']
+
+    # 1. EXIF metadata
+    exif_data = img.getexif() if hasattr(img, 'getexif') else None
+    if not exif_data or len(exif_data) == 0:
+        score += 30
+        flags.append('No EXIF metadata (real phone photos usually have this)')
+    else:
+        has_camera = False
+        for tag_id, value in exif_data.items():
+            tag = TAGS.get(tag_id, tag_id)
+            if tag in ('Make', 'Model') and value:
+                has_camera = True
+                break
+        if not has_camera:
+            score += 20
+            flags.append('No camera make/model in EXIF')
+
+    # 2. Generator signatures in file bytes
+    try:
+        size = os.path.getsize(file_path)
+        with open(file_path, 'rb') as f:
+            head = f.read(16384)
+            tail = b''
+            if size > 16384:
+                f.seek(-16384, 2)
+                tail = f.read()
+        content = (head + tail).lower()
+        generators = [
+            b'midjourney', b'dall-e', b'dalle', b'stable diffusion', b'stablediffusion',
+            b'adobe firefly', b'generated by ai', b'ai-generated', b'runway', b'sora',
+            b'leonardo.ai', b'flux.1',
+        ]
+        for g in generators:
+            if g in content:
+                score += 60
+                flags.append(f'Contains AI generator signature: {g.decode()}')
+                break
+    except Exception:
+        pass
+
+    # 3. Standard AI dimensions
+    w, h = img.size
+    ai_dims = {512, 768, 1024, 1536, 2048}
+    if w in ai_dims and h in ai_dims:
+        score += 10
+        flags.append(f'Standard AI output dimension ({w}x{h})')
+
+    # 4. Compression heuristics
+    try:
+        bytes_per_pixel = os.path.getsize(file_path) / (w * h)
+        if bytes_per_pixel < 0.15:
+            score += 10
+            flags.append('Unusually compressed for its size (common in AI exports)')
+    except Exception:
+        pass
+
+    score = min(score, 100)
+
+    if score < 20:
+        flags.append('✓ Looks like a genuine photo')
+    elif score < 50:
+        flags.append('⚠ Some suspicious traits — flagged for closer review')
+    elif score < 75:
+        flags.append('⚠⚠ Suspicious — likely edited or generated')
+    else:
+        flags.append('✗ High likelihood of AI generation or editing')
+
+    return score, flags

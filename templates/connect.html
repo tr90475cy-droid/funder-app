@@ -1,0 +1,69 @@
+{% extends "base.html" %}
+
+{% block title %}Add Up{% endblock %}
+
+{% block content %}
+
+<div class="app">
+
+  <!-- ═══════════ HEADER ═══════════ -->
+  <header class="header">
+    <div class="header-brand">
+      <a href="{{ url_for('home') }}" class="icon-btn" aria-label="Back">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+          <path d="m15 18-6-6 6-6"/>
+        </svg>
+      </a>
+      <div class="header-brand-text">
+        <div class="header-brand-name">Add Up</div>
+        <div class="header-brand-sub">Find your people</div>
+      </div>
+    </div>
+  </header>
+
+  <!-- ═══════════ TABS ═══════════ -->
+  <div class="chips" id="connectTabs">
+    <button class="chip active" data-tab="discover">Discover</button>
+    <button class="chip" data-tab="requests">
+      Requests
+      <span class="chip-badge hidden" id="reqCountBadge">0</span>
+    </button>
+    <button class="chip" data-tab="connections">My Circle</button>
+  </div>
+
+  <!-- ═══════════ DISCOVER PANEL ═══════════ -->
+  <section class="connect-panel" id="panelDiscover">
+    <div class="section-label">Students on <em>campus</em></div>
+    <div class="connect-list" id="discoverList">
+      <div class="empty">Loading…</div>
+    </div>
+  </section>
+
+  <!-- ═══════════ REQUESTS PANEL ═══════════ -->
+  <section class="connect-panel hidden" id="panelRequests">
+    <div class="section-label">Incoming <em>requests</em></div>
+    <div class="connect-list" id="incomingList">
+      <div class="empty">Loading…</div>
+    </div>
+
+    <div class="section-label" style="margin-top:26px;">Sent <em>requests</em></div>
+    <div class="connect-list" id="outgoingList">
+      <div class="empty">Loading…</div>
+    </div>
+  </section>
+
+  <!-- ═══════════ MY CIRCLE PANEL ═══════════ -->
+  <section class="connect-panel hidden" id="panelConnections">
+    <div class="section-label">My <em>circle</em></div>
+    <div class="connect-list" id="connectionsList">
+      <div class="empty">Loading…</div>
+    </div>
+  </section>
+
+</div>
+
+{% endblock %}
+
+{% block scripts %}
+<script src="{{ url_for('static', filename='js/connect.js') }}"></script>
+{% endblock %}

@@ -1,0 +1,40 @@
+{% extends "base.html" %}
+{% block title %}Admin Log{% endblock %}
+{% block content %}
+
+<div class="admin-wrap">
+  <div class="admin-head">
+    <div>
+      <h1>Admin <em>Audit Log</em></h1>
+      <p class="sub">Every admin action, recorded</p>
+    </div>
+    <div class="admin-head-actions">
+      <a href="{{ url_for('admin') }}" class="btn btn-ghost btn-sm">Back to Admin</a>
+      <a href="{{ url_for('admin_lock') }}" class="btn btn-ghost btn-sm">Lock</a>
+    </div>
+  </div>
+
+  {% if not logs %}
+    <div class="empty">No actions recorded yet.</div>
+  {% endif %}
+
+  {% for l in logs %}
+    <div class="verify-card">
+      <div class="recent-head">
+        <div>
+          <div class="recent-name">
+            <span class="tag tag-{{ 'approved' if l.action == 'approve' else 'rejected' }}">{{ l.action }}</span>
+            by {{ l.admin.full_name }}
+          </div>
+          <div class="recent-meta">
+            {% if l.target_detail %}{{ l.target_detail }} · {% endif %}
+            IP {{ l.ip_address or 'unknown' }} ·
+            {{ l.created_at.strftime('%b %d, %Y · %I:%M %p') }}
+          </div>
+        </div>
+      </div>
+    </div>
+  {% endfor %}
+</div>
+
+{% endblock %}

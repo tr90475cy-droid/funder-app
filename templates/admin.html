@@ -1,0 +1,213 @@
+{% extends "base.html" %}
+
+{% block title %}Admin{% endblock %}
+
+{% block content %}
+
+<div class="admin-wrap">
+
+  <!-- ═══════════ HEADER ═══════════ -->
+  <div class="admin-head">
+    <div>
+      <h1>FUNDAR <em>Admin</em></h1>
+      <p class="sub">Review student verifications and manage the campus</p>
+    </div>
+    <div class="admin-head-actions">
+      <a href="{{ url_for('home') }}" class="btn btn-ghost btn-sm">View Feed</a>
+      <a href="{{ url_for('logout') }}" class="btn btn-ghost btn-sm">Sign out</a>
+    </div>
+  </div>
+
+  <!-- ═══════════ STATS ═══════════ -->
+  <div class="stat-row">
+    <div class="stat">
+      <div class="stat-num">{{ pending|length }}</div>
+      <div class="stat-label">Pending Review</div>
+    </div>
+    <div class="stat">
+      <div class="stat-num">{{ recent|selectattr('status','equalto','approved')|list|length }}</div>
+      <div class="stat-label">Recently Approved</div>
+    </div>
+    <div class="stat">
+      <div class="stat-num">{{ recent|selectattr('status','equalto','rejected')|list|length }}</div>
+      <div class="stat-label">Recently Rejected</div>
+    </div>
+    <div class="stat">
+      <div class="stat-num">{{ pending|length + (recent|length) }}</div>
+      <div class="stat-label">Total Submissions</div>
+    </div>
+  </div>
+
+  <!-- ═══════════ PENDING VERIFICATIONS ═══════════ -->
+  <h2 class="admin-section-title">Pending Verifications</h2>
+
+  {% if not pending %}
+    <div class="empty">
+      <div style="font-size:48px; margin-bottom:12px;">🎉</div>
+      No pending verifications. Everything is reviewed!
+    </div>
+  {% endif %}
+
+  {% for v in pending %}
+    {% set flags = v.ai_flags|fromjson %}
+    {% set score = v.ai_score or 0 %}
+
+    <div class="verify-card" data-vid="{{ v.id }}">
+
+      <!-- ── HEAD ── -->
+      <div class="verify-head">
+        <div>
+          <div class="verify-name">{{ v.user.full_name }}</div>
+          <div class="verify-contact">
+            {{ v.user.email }}
+            {% if v.user.phone %} · {{ v.user.phone }}{% endif %}
+          </div>
+        </div>
+        <span class="tag tag-pending">Pending</span>
+      </div>
+
+      <!-- ── STUDENT DETAILS ── -->
+      <div class="verify-row">
+        <div>
+          <span class="k">Matric Number</span>
+          <span class="v">{{ v.matric_no }}</span>
+        </div>
+        <div>
+          <span class="k">Faculty</span>
+          <span class="v">{{ v.faculty }}</span>
+        </div>
+        <div>
+          <span class="k">Department</span>
+          <span class="v">{{ v.department }}</span>
+        </div>
+        <div>
+          <span class="k">Level</span>
+          <span class="v">{{ v.level }}L</span>
+        </div>
+        <div>
+          <span class="k">Admission Year</span>
+          <span class="v">{{ v.admission_year }}</span>
+        </div>
+        <div>
+          <span class="k">Submitted</span>
+          <span class="v">
+            {{ v.submitted_at.strftime('%b %d, %Y · %I:%M %p') if v.submitted_at else '—' }}
+          </span>
+        </div>
+      </div>
+
+      <!-- ── AI DETECTION SCORE ── -->
+      {% if score < 30 %}
+        <div class="ai-meter ai-safe">
+          <span>🔒 AI Check: Likely authentic ({{ score|int }}% AI-likelihood)</span>
+          <div class="ai-bar"><div style="width:{{ score }}%"></div></div>
+        </div>
+      {% elif score < 60 %}
+        <div class="ai-meter ai-warn">
+          <span>⚠ AI Check: Review carefully ({{ score|int }}% AI-likelihood)</span>
+          <div class="ai-bar"><div style="width:{{ score }}%"></div></div>
+        </div>
+      {% else %}
+        <div class="ai-meter ai-danger">
+          <span>🚨 AI Check: Suspicious ({{ score|int }}% AI-likelihood)</span>
+          <div class="ai-bar"><div style="width:{{ score }}%"></div></div>
+        </div>
+      {% endif %}
+
+      {% if flags %}
+        <ul class="ai-flags">
+          {% for f in flags %}
+            <li>{{ f }}</li>
+          {% endfor %}
+        </ul>
+      {% endif %}
+
+      <!-- ── DOCUMENT PREVIEW ── -->
+      <div class="verify-doc">
+        {% if v.admission_letter_path %}
+          {% if v.admission_letter_path.lower().endswith('.pdf') %}
+            <a href="{{ url_for('uploaded_file', filename=v.admission_letter_path) }}"
+               target="_blank" rel="noopener">
+              📄 Open PDF document in new tab
+            </a>
+          {% else %}
+            <a href="{{ url_for('uploaded_file', filename=v.admission_letter_path) }}"
+               target="_blank" rel="noopener">
+              <img src="{{ url_for('uploaded_file', filename=v.admission_letter_path) }}"
+                   alt="Admission letter for {{ v.user.full_name }}">
+            </a>
+            <p class="field-hint" style="text-align:center; margin-top:8px;">
+              Tap image to open full size
+            </p>
+          {% endif %}
+        {% else %}
+          <em class="text-muted">No document uploaded</em>
+        {% endif %}
+      </div>
+
+      <!-- ── ACTIONS ── -->
+      <div class="verify-actions">
+
+        <!-- Approve -->
+        <form method="POST" action="{{ url_for('admin_approve', vid=v.id) }}">
+          <button type="submit" class="btn btn-success btn-block">
+            ✓ Approve
+          </button>
+        </form>
+
+        <!-- Reject with reason -->
+        <form method="POST" action="{{ url_for('admin_reject', vid=v.id) }}"
+              class="reject-form">
+          <input type="text"
+                 name="reason"
+                 placeholder="Rejection reason (e.g. blurry document)"
+                 class="reject-input"
+                 maxlength="200">
+          <button type="submit" class="btn btn-danger btn-block">
+            ✕ Reject
+          </button>
+        </form>
+
+      </div>
+
+    </div>
+  {% endfor %}
+
+  <!-- ═══════════ RECENT DECISIONS ═══════════ -->
+  {% if recent %}
+    <h2 class="admin-section-title" style="margin-top:36px;">Recent Decisions</h2>
+
+    <div class="recent-list">
+      {% for v in recent %}
+        <div class="verify-card">
+          <div class="recent-head">
+            <div>
+              <div class="recent-name">{{ v.user.full_name }}</div>
+              <div class="recent-meta">
+                {{ v.matric_no }} · {{ v.department }}
+                {% if v.reviewed_at %}
+                  · {{ v.reviewed_at.strftime('%b %d, %I:%M %p') }}
+                {% endif %}
+              </div>
+            </div>
+
+            {% if v.status == 'approved' %}
+              <span class="tag tag-approved">Approved</span>
+            {% else %}
+              <span class="tag tag-rejected">Rejected</span>
+            {% endif %}
+          </div>
+
+          {% if v.rejection_reason %}
+            <div class="recent-reason">
+              <strong>Reason:</strong> {{ v.rejection_reason }}
+            </div>
+          {% endif %}
+        </div>
+      {% endfor %}
+    </div>
+  {% endif %}
+
+</div>
+
+{% endblock %}

@@ -1,0 +1,60 @@
+{% extends "base.html" %}
+{% block title %}Parties{% endblock %}
+{% block content %}
+
+<div class="app">
+  <header class="header">
+    <div class="header-brand">
+      <a href="{{ url_for('home') }}" class="icon-btn" aria-label="Back">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="m15 18-6-6 6-6"/></svg>
+      </a>
+      <div class="header-brand-text">
+        <div class="header-brand-name">Parties & Events</div>
+        <div class="header-brand-sub">Lead City University</div>
+      </div>
+    </div>
+    <button class="btn btn-primary btn-sm" id="newEventBtn">+ Host</button>
+  </header>
+
+  <div class="section-label">Upcoming <em>events</em></div>
+  <div class="events-list" id="eventsList">
+    <div class="empty">Loading…</div>
+  </div>
+</div>
+
+<div class="modal-back" id="eventModal">
+  <div class="modal">
+    <div class="modal-head">
+      <button class="modal-close" id="eventClose">✕</button>
+      <div class="modal-title">Host Event</div>
+      <button class="post-btn" id="eventPost">Create</button>
+    </div>
+    <form id="eventForm">
+      <div class="field">
+        <label>Event title</label>
+        <input type="text" name="title" placeholder="LCU Block Party" required>
+      </div>
+      <div class="field">
+        <label>Venue</label>
+        <input type="text" name="venue" placeholder="Main field">
+      </div>
+      <div class="field">
+        <label>Starts at</label>
+        <input type="datetime-local" name="starts_at" required>
+      </div>
+      <div class="field">
+        <label>Description</label>
+        <textarea name="description" placeholder="DJ, entry, dress code…"></textarea>
+      </div>
+      <div class="field">
+        <label>Poster (optional)</label>
+        <input type="file" name="image" accept="image/*">
+      </div>
+    </form>
+  </div>
+</div>
+
+{% endblock %}
+{% block scripts %}
+<script src="{{ url_for('static', filename='js/parties.js') }}"></script>
+{% endblock %}

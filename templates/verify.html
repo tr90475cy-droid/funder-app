@@ -1,0 +1,114 @@
+{% extends "base.html" %}
+
+{% block title %}Verify{% endblock %}
+
+{% block content %}
+
+<div class="center-wrap">
+  <div class="card card-wide">
+
+    <h1>Student <em>verification</em></h1>
+    <p class="sub">Confirm you're a Lead City University student. Your details are private and only seen by our admins.</p>
+
+    <form method="POST" action="{{ url_for('verify') }}" enctype="multipart/form-data">
+      <div class="field">
+        <label for="matric_no">Matric Number</label>
+        <input
+          type="text"
+          id="matric_no"
+          name="matric_no"
+          value="{{ form.matric_no or '' }}"
+          placeholder="e.g. LCU/22/1234"
+          required
+          autofocus
+        >
+      </div>
+
+      <div class="field">
+        <label for="faculty">Faculty</label>
+        <select id="faculty" name="faculty" required>
+          <option value="">Select faculty</option>
+          {% set faculties = [
+            'Basic Medical Sciences',
+            'Clinical Sciences',
+            'Communication & Media Studies',
+            'Education',
+            'Engineering',
+            'Environmental Design & Management',
+            'Humanities',
+            'Law',
+            'Management Sciences',
+            'Natural & Applied Sciences',
+            'Pharmacy',
+            'Social Sciences',
+            'Other'
+          ] %}
+          {% for f in faculties %}
+            <option value="{{ f }}" {% if form.faculty == f %}selected{% endif %}>{{ f }}</option>
+          {% endfor %}
+        </select>
+      </div>
+
+      <div class="field">
+        <label for="department">Department</label>
+        <input
+          type="text"
+          id="department"
+          name="department"
+          value="{{ form.department or '' }}"
+          placeholder="e.g. Computer Science"
+          required
+        >
+      </div>
+
+      <div class="grid-2">
+        <div class="field">
+          <label for="level">Level</label>
+          <select id="level" name="level" required>
+            <option value="">Select level</option>
+            {% for l in ['100', '200', '300', '400', '500'] %}
+              <option value="{{ l }}" {% if form.level == l %}selected{% endif %}>{{ l }}L</option>
+            {% endfor %}
+          </select>
+        </div>
+
+        <div class="field">
+          <label for="admission_year">Admission Year</label>
+          <input
+            type="text"
+            id="admission_year"
+            name="admission_year"
+            value="{{ form.admission_year or '' }}"
+            placeholder="2023"
+            required
+            maxlength="4"
+          >
+        </div>
+      </div>
+
+      <div class="field">
+        <label for="admission_letter">Admission Letter / Student ID photo</label>
+        <input
+          type="file"
+          id="admission_letter"
+          name="admission_letter"
+          accept="image/*,.pdf"
+          required
+        >
+        <p class="field-hint">
+          Upload a clear photo of your admission letter or student ID.
+          AI-generated or heavily edited images will be rejected automatically.
+        </p>
+      </div>
+
+      <button type="submit" class="btn btn-primary btn-block">Submit for Verification</button>
+    </form>
+
+    <p class="card-footer">
+      <a href="{{ url_for('logout') }}">Sign out</a>
+    </p>
+
+  </div>
+</div>
+
+{% endblock %}

@@ -1,0 +1,77 @@
+{% extends "base.html" %}
+
+{% block title %}Verification Status{% endblock %}
+
+{% block content %}
+
+<div class="center-wrap">
+  <div class="card card-wide">
+
+    {% if user.verification_status == 'rejected' %}
+
+      <div class="pending-hero">
+        <div class="pending-icon danger">✕</div>
+        <h2>Verification rejected</h2>
+        <p>We couldn't verify your submission. Please review the reason below and resubmit.</p>
+      </div>
+
+      {% if verification and verification.rejection_reason %}
+        <div class="detail-list">
+          <div class="row">
+            <span>Reason</span>
+            <span>{{ verification.rejection_reason }}</span>
+          </div>
+        </div>
+      {% endif %}
+
+      <a href="{{ url_for('verify') }}" class="btn btn-primary btn-block">Resubmit Verification</a>
+
+    {% else %}
+
+      <div class="pending-hero">
+        <div class="pending-icon">⏳</div>
+        <h2>Verification pending</h2>
+        <p>Your submission is being reviewed by our team. This usually takes a few hours.</p>
+      </div>
+
+      {% if verification %}
+        <div class="detail-list">
+          <div class="row">
+            <span>Matric</span>
+            <span>{{ verification.matric_no }}</span>
+          </div>
+          <div class="row">
+            <span>Faculty</span>
+            <span>{{ verification.faculty }}</span>
+          </div>
+          <div class="row">
+            <span>Department</span>
+            <span>{{ verification.department }}</span>
+          </div>
+          <div class="row">
+            <span>Level</span>
+            <span>{{ verification.level }}L</span>
+          </div>
+          <div class="row">
+            <span>Admission Year</span>
+            <span>{{ verification.admission_year }}</span>
+          </div>
+          <div class="row">
+            <span>Status</span>
+            <span><span class="tag tag-pending">Pending</span></span>
+          </div>
+        </div>
+      {% endif %}
+
+      <p class="card-footer">
+        <a href="{{ url_for('pending') }}">Refresh status</a>
+        &nbsp;·&nbsp;
+        <a href="{{ url_for('logout') }}">Sign out</a>
+      </p>
+
+    {% endif %}
+
+  </div>
+</div>
+
+{% endblock %}
