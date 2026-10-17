@@ -19,6 +19,11 @@ class User(db.Model):
     bio = db.Column(db.String(200))
     avatar_seed = db.Column(db.String(40))
     profile_picture_path = db.Column(db.String(255))
+
+    # Paystack
+    subaccount_code = db.Column(db.String(50), index=True)
+    paystack_recipient_code = db.Column(db.String(50))
+
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
 
     verification = db.relationship(
@@ -173,9 +178,17 @@ class Listing(db.Model):
     category = db.Column(db.String(40), default='other')
     image_path = db.Column(db.String(255))
     sold = db.Column(db.Boolean, default=False)
+
+    # Paystack / promoted listings
+    featured = db.Column(db.Boolean, default=False, index=True)
+    sold_at = db.Column(db.DateTime)
+    buyer_id = db.Column(db.Integer, db.ForeignKey('users.id'))
+    payment_reference = db.Column(db.String(100), index=True)
+
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
 
-    seller = db.relationship('User')
+    seller = db.relationship('User', foreign_keys=[user_id])
+    buyer = db.relationship('User', foreign_keys=[buyer_id])
 
 
 # ─────────────────────────────────────────────

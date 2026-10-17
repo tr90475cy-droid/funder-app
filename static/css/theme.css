@@ -3509,4 +3509,121 @@ h3 em {
     padding-bottom: max(100px, calc(env(safe-area-inset-bottom) + 80px));
   }
 }
+/* ═══════════════════════════════════════════
+   48. MARKETPLACE — Paystack integration
+   ═══════════════════════════════════════════ */
+
+/* Seller banner */
+.seller-banner {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin: 12px;
+  padding: 12px 14px;
+  background: linear-gradient(135deg, rgba(34, 197, 94, 0.12) 0%, rgba(240, 178, 77, 0.10) 100%);
+  border: 1px solid rgba(34, 197, 94, 0.30);
+  border-radius: var(--r-lg);
+}
+.seller-banner.hidden { display: none; }
+
+.seller-banner-icon {
+  font-size: 28px;
+  flex-shrink: 0;
+}
+
+.seller-banner-body { flex: 1; min-width: 0; }
+
+.seller-banner-title {
+  font-size: 13.5px;
+  font-weight: 800;
+  color: var(--text);
+  margin-bottom: 2px;
+}
+
+.seller-banner-sub {
+  font-size: 11.5px;
+  color: var(--text-muted);
+  line-height: 1.4;
+}
+
+/* Buy button */
+.listing-buy-btn {
+  margin-top: 8px;
+  padding: 8px 12px;
+  background: var(--primary);
+  color: #22252D;
+  border: none;
+  border-radius: var(--r-full);
+  font-size: 12px;
+  font-weight: 800;
+  font-family: inherit;
+  cursor: pointer;
+  transition: background 0.15s;
+  width: 100%;
+}
+.listing-buy-btn:hover { background: var(--primary-deep); }
+
+/* Featured badge + card */
+.listing.is-featured {
+  border-color: var(--primary);
+  box-shadow: 0 0 0 1px var(--primary);
+}
+
+.listing-featured-badge {
+  position: absolute;
+  top: 6px;
+  left: 6px;
+  padding: 3px 8px;
+  background: var(--primary);
+  color: #22252D;
+  font-size: 10px;
+  font-weight: 800;
+  border-radius: var(--r-full);
+  z-index: 2;
+}
+
+/* Buy confirmation modal */
+.buy-item {
+  display: flex;
+  gap: 12px;
+  padding: 12px;
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: var(--r-md);
+}
+.buy-item img {
+  width: 72px;
+  height: 72px;
+  border-radius: var(--r-md);
+  object-fit: cover;
+  flex-shrink: 0;
+}
+.buy-item-img-empty {
+  width: 72px;
+  height: 72px;
+  border-radius: var(--r-md);
+  background: var(--surface-2);
+  display: grid;
+  place-items: center;
+  font-size: 28px;
+  flex-shrink: 0;
+}
+.buy-item-info { flex: 1; min-width: 0; }
+.buy-item-title {
+  font-size: 14px;
+  font-weight: 700;
+  color: var(--text);
+  margin-bottom: 3px;
+}
+.buy-item-price {
+  font-family: var(--font-display);
+  font-size: 17px;
+  font-weight: 800;
+  color: var(--primary);
+  margin-bottom: 3px;
+}
+.buy-item-seller {
+  font-size: 11.5px;
+  color: var(--text-muted);
+}
 }

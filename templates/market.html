@@ -16,6 +16,17 @@
     <button class="btn btn-primary btn-sm" id="newListingBtn">+ Sell</button>
   </header>
 
+  <!-- ═══════════ SELLER PAYMENTS BANNER ═══════════ -->
+  <div class="seller-banner hidden" id="sellerBanner">
+    <div class="seller-banner-icon">💳</div>
+    <div class="seller-banner-body">
+      <div class="seller-banner-title">Set up payments to sell</div>
+      <div class="seller-banner-sub">Add your bank details once. Get paid directly when you sell.</div>
+    </div>
+    <button class="btn btn-primary btn-sm" id="setupBankBtn">Set up</button>
+  </div>
+
+  <!-- ═══════════ CATEGORY FILTERS ═══════════ -->
   <div class="chips" id="marketChips">
     <button class="chip active" data-cat="all">All</button>
     <button class="chip" data-cat="books">📚 Books</button>
@@ -25,13 +36,22 @@
     <button class="chip" data-cat="other">📦 Other</button>
   </div>
 
+  <!-- ═══════════ FEATURED LISTINGS ═══════════ -->
+  <div id="featuredSection" class="hidden">
+    <div class="section-label">Featured <em>listings</em></div>
+    <div class="market-grid" id="featuredGrid"></div>
+  </div>
+
+  <!-- ═══════════ ALL LISTINGS ═══════════ -->
   <div class="section-label">Campus <em>market</em></div>
   <div class="market-grid" id="marketGrid">
     <div class="empty">Loading listings…</div>
   </div>
 </div>
 
-<!-- New Listing modal -->
+<!-- ═══════════════════════════════════════════
+     NEW LISTING MODAL
+     ═══════════════════════════════════════════ -->
 <div class="modal-back" id="listingModal">
   <div class="modal">
     <div class="modal-head">
@@ -68,6 +88,72 @@
         <input type="file" name="image" accept="image/*">
       </div>
     </form>
+  </div>
+</div>
+
+<!-- ═══════════════════════════════════════════
+     BANK SETUP MODAL (for sellers)
+     ═══════════════════════════════════════════ -->
+<div class="modal-back" id="bankSetupModal">
+  <div class="modal">
+    <div class="modal-head">
+      <button class="modal-close" id="bankSetupClose">✕</button>
+      <div class="modal-title">Set up payments</div>
+      <button class="post-btn" id="bankSetupSave" disabled>Save</button>
+    </div>
+
+    <p class="field-hint" style="margin-bottom: 14px;">
+      Enter your Nigerian bank details. You'll receive payments directly for your sales.
+      FUNDAR charges a small commission on each sale.
+    </p>
+
+    <div class="field">
+      <label for="bankSelect">Bank</label>
+      <select id="bankSelect">
+        <option value="">Loading banks…</option>
+      </select>
+    </div>
+
+    <div class="field">
+      <label for="accountNumber">Account number</label>
+      <input type="text" id="accountNumber" maxlength="10" inputmode="numeric"
+             placeholder="0123456789" autocomplete="off">
+    </div>
+
+    <div class="field">
+      <label for="accountName">Account name</label>
+      <input type="text" id="accountName" readonly placeholder="Will appear after verification">
+      <p class="field-hint" id="verifyHint">Enter a 10-digit account number to verify.</p>
+    </div>
+
+    <div class="field">
+      <label for="dobField">Date of birth (for Paystack)</label>
+      <input type="date" id="dobField">
+    </div>
+  </div>
+</div>
+
+<!-- ═══════════════════════════════════════════
+     BUY CONFIRMATION MODAL
+     ═══════════════════════════════════════════ -->
+<div class="modal-back" id="buyModal">
+  <div class="modal">
+    <div class="modal-head">
+      <button class="modal-close" id="buyClose">✕</button>
+      <div class="modal-title">Confirm purchase</div>
+      <div class="modal-head-spacer"></div>
+    </div>
+
+    <div id="buyContent">
+      <p style="font-size: 14px; color: var(--text-soft); margin-bottom: 16px;">
+        You'll be redirected to Paystack to complete payment securely.
+      </p>
+      <div id="buyItemCard" class="buy-item-card"></div>
+    </div>
+
+    <button class="btn btn-primary btn-block" id="buyProceedBtn" style="margin-top: 18px;">
+      Pay with Paystack →
+    </button>
   </div>
 </div>
 
