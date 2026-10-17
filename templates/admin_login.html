@@ -1,0 +1,33 @@
+{% extends "base.html" %}
+{% block title %}Admin Login{% endblock %}
+{% block content %}
+<div class="center-wrap">
+  <div class="card">
+    <div class="brand-row">
+      <div class="brand-mark">F</div>
+      <div>
+        <div class="brand-name">Fundar</div>
+        <div class="brand-sub">Admin Access</div>
+      </div>
+    </div>
+    <h1>Admin <em>sign in</em></h1>
+    <p class="sub">Three fields: email, password, admin key.</p>
+    <form method="POST" action="{{ url_for('admin_login') }}">
+      <div class="field">
+        <label for="email">Admin Email</label>
+        <input type="email" id="email" name="email" placeholder="you@example.com" required autofocus>
+      </div>
+      <div class="field">
+        <label for="password">Password</label>
+        <input type="password" id="password" name="password" placeholder="••••••••" required>
+      </div>
+      <div class="field">
+        <label for="admin_key">Admin Key</label>
+        <input type="password" id="admin_key" name="admin_key" placeholder="Your secret admin key" required>
+        <p class="field-hint">The key set in your Railway environment variables.</p>
+      </div>
+      <button type="submit" class="btn btn-primary btn-block">Enter Admin</button>
+    </form>
+  </div>
+</div>
+{% endblock %}

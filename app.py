@@ -14,6 +14,7 @@ from models import (db, User, StudentVerification, Post, Like, Comment,
                     Listing, Assignment, Event, EventRSVP, Connection,
                     Follow, ProfileView, AdminAction)
 from ai_check import analyze_image
+
 try:
     from dotenv import load_dotenv
     load_dotenv()
@@ -25,7 +26,7 @@ app.config.from_object(Config)
 os.makedirs(app.config['UPLOAD_FOLDER'], exist_ok=True)
 db.init_app(app)
 
-socketio = SocketIO(app, cors_allowed_origins='*', async_mode='threading')
+socketio = SocketIO(app, cors_allowed_origins='*', async_mode='eventlet')
 
 
 # ─────────────────────────────────────────────
@@ -105,7 +106,6 @@ def time_ago(dt):
 # ADMIN SECURITY HELPERS
 # ─────────────────────────────────────────────
 def admin_session_expired():
-    """True if admin session has timed out."""
     last = session.get('admin_last_seen')
     if not last:
         return True
@@ -308,7 +308,7 @@ def home():
 
 
 # ─────────────────────────────────────────────
-# FEED — ranked / personalized
+# FEED
 # ─────────────────────────────────────────────
 def serialize_post(p, me_id):
     liked = any(l.user_id == me_id for l in p.likes)
@@ -471,8 +471,9 @@ def api_comments(pid):
 def uploaded_file(filename):
     return send_from_directory(app.config['UPLOAD_FOLDER'], filename)
 
-    # ─────────────────────────────────────────────
-# PWA — manifest + service worker at root scope
+
+# ─────────────────────────────────────────────
+# PWA
 # ─────────────────────────────────────────────
 @app.route('/manifest.json')
 def pwa_manifest():
@@ -490,15 +491,11 @@ def pwa_service_worker():
         'static', 'sw.js',
         mimetype='application/javascript'
     )
-    # Allow SW to control the whole site
     response.headers['Service-Worker-Allowed'] = '/'
     response.headers['Cache-Control'] = 'no-cache'
     return response
 
 
-# ─────────────────────────────────────────────
-# Android Digital Asset Links (for full-screen TWA)
-# ─────────────────────────────────────────────
 @app.route('/.well-known/assetlinks.json')
 def assetlinks():
     path = os.path.join(app.root_path, '.well-known', 'assetlinks.json')
@@ -1295,7 +1292,7 @@ def api_user_posts(uid):
 
 
 # ─────────────────────────────────────────────
-# FOLLOWERS / FOLLOWING (my own)
+# FOLLOWERS / FOLLOWING
 # ─────────────────────────────────────────────
 @app.route('/api/me/following')
 @verified_required
@@ -1316,46 +1313,50 @@ def api_me_followers():
 
 
 # ─────────────────────────────────────────────
-# ADMIN — SECRET URL + UNLOCK
+# ADMIN — SINGLE LOGIN, PERMANENT, LAUNCH-READY
 # ─────────────────────────────────────────────
-
-@app.route('/admin-unlock', methods=['GET', 'POST'])
-@login_required
-def admin_unlock():
+@app.route('/admin-login', methods=['GET', 'POST'])
+def admin_login():
+    """Direct admin login. Auto-unlocks the session on success."""
     u = current_user()
-    if not u or u.role != 'admin':
-        abort(404)
+    if u and u.role == 'admin':
+        session['admin_unlocked'] = True
+        touch_admin_session()
+        return redirect(url_for('admin'))
 
     if request.method == 'POST':
-        key = request.form.get('admin_key', '').strip()
-        if key == app.config['ADMIN_KEY']:
-            session['admin_unlocked'] = True
-            touch_admin_session()
-            flash('Admin unlocked', 'success')
-            return redirect(url_for('admin'))
-        flash('Invalid admin key', 'error')
+        email = request.form.get('email', '').strip().lower()
+        password = request.form.get('password', '')
+        admin_key = request.form.get('admin_key', '').strip()
 
-    return render_template('admin_unlock.html')
+        user = User.query.filter_by(email=email, role='admin').first()
+        if not user or not check_password_hash(user.password_hash, password):
+            flash('Invalid admin email or password', 'error')
+            return render_template('admin_login.html')
+
+        if admin_key != app.config['ADMIN_KEY']:
+            flash('Invalid admin key', 'error')
+            return render_template('admin_login.html')
+
+        session['user_id'] = user.id
+        session['admin_unlocked'] = True
+        touch_admin_session()
+        flash('Admin unlocked', 'success')
+        return redirect(url_for('admin'))
+
+    return render_template('admin_login.html')
 
 
 def admin_view():
-    """The admin dashboard. Registered at the secret path."""
+    """The admin dashboard."""
     u = current_user()
-    if not u:
-        return redirect(url_for('login'))
-    if u.role != 'admin':
-        abort(404)
+    if not u or u.role != 'admin':
+        return redirect(url_for('admin_login'))
 
-    # Require unlock
-    if not session.get('admin_unlocked'):
-        return redirect(url_for('admin_unlock'))
-
-    # Session timeout
-    if admin_session_expired():
+    if not session.get('admin_unlocked') or admin_session_expired():
         session.pop('admin_unlocked', None)
         session.pop('admin_last_seen', None)
-        flash('Admin session expired. Please unlock again.', 'error')
-        return redirect(url_for('admin_unlock'))
+        return redirect(url_for('admin_login'))
 
     touch_admin_session()
 
@@ -1366,7 +1367,6 @@ def admin_view():
     return render_template('admin.html', pending=pending, recent=recent)
 
 
-# Register the admin dashboard at the secret path
 app.add_url_rule(app.config['ADMIN_PATH'], 'admin', admin_view)
 
 
@@ -1375,7 +1375,7 @@ def admin_lock():
     session.pop('admin_unlocked', None)
     session.pop('admin_last_seen', None)
     flash('Admin locked', 'success')
-    return redirect(url_for('home'))
+    return redirect(url_for('admin_login'))
 
 
 @app.route(app.config['ADMIN_PATH'] + '/approve/<int:vid>', methods=['POST'])
@@ -1384,7 +1384,7 @@ def admin_approve(vid):
     if not u or u.role != 'admin':
         abort(404)
     if not is_admin_unlocked():
-        return redirect(url_for('admin_unlock'))
+        return redirect(url_for('admin_login'))
     touch_admin_session()
 
     v = StudentVerification.query.get_or_404(vid)
@@ -1405,7 +1405,7 @@ def admin_reject(vid):
     if not u or u.role != 'admin':
         abort(404)
     if not is_admin_unlocked():
-        return redirect(url_for('admin_unlock'))
+        return redirect(url_for('admin_login'))
     touch_admin_session()
 
     reason = request.form.get('reason', '').strip() or 'Document could not be verified'
@@ -1428,7 +1428,7 @@ def admin_log_view():
     if not u or u.role != 'admin':
         abort(404)
     if not is_admin_unlocked():
-        return redirect(url_for('admin_unlock'))
+        return redirect(url_for('admin_login'))
     touch_admin_session()
 
     logs = AdminAction.query.order_by(AdminAction.created_at.desc()).limit(200).all()
@@ -1505,12 +1505,18 @@ with app.app_context():
     admin_email = os.environ.get('ADMIN_EMAIL', 'oladipobright12@gmail.com')
     admin_pass  = os.environ.get('ADMIN_PASSWORD', 'bright_kelvin*$')
 
-    if not User.query.filter_by(email=admin_email).first():
-        # Check if an admin already exists with a different email
-        existing_admin = User.query.filter_by(role='admin').first()
-        if existing_admin:
-            existing_admin.email = admin_email
-            existing_admin.password_hash = generate_password_hash(admin_pass)
+    existing = User.query.filter_by(email=admin_email).first()
+    if existing:
+        if existing.role != 'admin':
+            existing.role = 'admin'
+            existing.verification_status = 'verified'
+            db.session.commit()
+        print(f'✓ Admin exists: {admin_email}')
+    else:
+        other_admin = User.query.filter_by(role='admin').first()
+        if other_admin:
+            other_admin.email = admin_email
+            other_admin.password_hash = generate_password_hash(admin_pass)
             db.session.commit()
             print(f'✓ Admin credentials updated: {admin_email}')
         else:
@@ -1528,14 +1534,14 @@ with app.app_context():
 
 
 if __name__ == '__main__':
-    import os
     port = int(os.environ.get('PORT', 5000))
     debug = os.environ.get('FLASK_ENV') == 'development'
 
     print('=' * 60)
-    print(f'  ADMIN URL : {app.config["ADMIN_PATH"]}')
-    print(f'  ADMIN KEY : {app.config["ADMIN_KEY"]}')
-    print(f'  ADMIN SESSION TIMEOUT: {app.config["ADMIN_SESSION_MINUTES"]} min')
+    print(f'  ADMIN URL  : {app.config["ADMIN_PATH"]}')
+    print(f'  ADMIN KEY  : {app.config["ADMIN_KEY"]}')
+    print(f'  ADMIN LOGIN: /admin-login')
+    print(f'  ADMIN EMAIL: {os.environ.get("ADMIN_EMAIL", "oladipobright12@gmail.com")}')
     print('=' * 60)
 
     if debug:
