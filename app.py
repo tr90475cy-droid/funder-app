@@ -14,8 +14,11 @@ from models import (db, User, StudentVerification, Post, Like, Comment,
                     Listing, Assignment, Event, EventRSVP, Connection,
                     Follow, ProfileView, AdminAction)
 from ai_check import analyze_image
-from dotenv import load_dotenv
-load_dotenv()   # reads .env and sets env vars
+try:
+    from dotenv import load_dotenv
+    load_dotenv()
+except ImportError:
+    pass
 
 app = Flask(__name__)
 app.config.from_object(Config)
