@@ -1,6 +1,3 @@
-import eventlet
-eventlet.monkey_patch()
-
 import os
 import json
 from datetime import datetime, timedelta
@@ -29,7 +26,7 @@ app.config.from_object(Config)
 os.makedirs(app.config['UPLOAD_FOLDER'], exist_ok=True)
 db.init_app(app)
 
-socketio = SocketIO(app, cors_allowed_origins='*', async_mode='gevent')
+socketio = SocketIO(app, cors_allowed_origins='*', async_mode='threading')
 
 
 # ─────────────────────────────────────────────
@@ -1320,10 +1317,11 @@ def api_me_followers():
 # ─────────────────────────────────────────────
 @app.route('/admin-login', methods=['GET', 'POST'])
 def admin_login():
-    """Direct admin login. Auto-unlocks the session on success."""
+    """Three-factor login: email + password + admin key. No auto-unlock."""
     u = current_user()
-    if u and u.role == 'admin':
-        session['admin_unlocked'] = True
+
+    # Only skip if FULLY unlocked (has key + not expired)
+    if u and u.role == 'admin' and session.get('admin_unlocked') and not admin_session_expired():
         touch_admin_session()
         return redirect(url_for('admin'))
 
@@ -1344,6 +1342,7 @@ def admin_login():
         session['user_id'] = user.id
         session['admin_unlocked'] = True
         touch_admin_session()
+        log_admin_action('admin_login')
         flash('Admin unlocked', 'success')
         return redirect(url_for('admin'))
 
