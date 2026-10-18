@@ -614,13 +614,19 @@ def api_subaccount_status():
 BANK_CACHE = {'banks': None, 'fetched_at': None}
 CACHE_TTL_HOURS = 6
 
+# ─────────────────────────────────────────────
+# PAYSTACK — Banks + Verify Account
+# ─────────────────────────────────────────────
+import requests
+
 @app.route('/api/paystack/banks')
 @verified_required
 def api_paystack_banks():
-    if not paystack:
+    """Return the full list of Nigerian banks from Paystack."""
+    if not paystack or not PAYSTACK_SECRET_KEY:
         return jsonify([])
 
-    # Return cached list if still fresh
+    # Serve from cache if fresh
     now = datetime.utcnow()
     if BANK_CACHE['banks'] and BANK_CACHE['fetched_at']:
         age_hours = (now - BANK_CACHE['fetched_at']).total_seconds() / 3600
@@ -628,56 +634,48 @@ def api_paystack_banks():
             return jsonify(BANK_CACHE['banks'])
 
     try:
-        all_banks = []
-        next_cursor = None
-
-        # Loop through all pages of banks
-        while True:
-            kwargs = {
+        # Direct REST call — more reliable than library wrappers
+        r = requests.get(
+            'https://api.paystack.co/bank',
+            headers={'Authorization': f'Bearer {PAYSTACK_SECRET_KEY}'},
+            params={
                 'country': 'nigeria',
-                'use_cursor': True,
-                'per_page': 100,
-            }
-            if next_cursor:
-                kwargs['next_cursor'] = next_cursor
+                'currency': 'NGN',
+                'use_cursor': 'true',
+                'perPage': 100,
+            },
+            timeout=10,
+        )
+        r.raise_for_status()
+        payload = r.json()
 
-            response = paystack.misc.list_banks(**kwargs)
+        if not payload.get('status'):
+            print(f"[BANKS] Paystack rejected request: {payload.get('message')}")
+            return jsonify([])
 
-            if not response.get('status'):
-                break
-
-            data = response.get('data', [])
-            all_banks.extend(data)
-
-            # Check if there's a next page
-            meta = response.get('meta', {})
-            next_cursor = meta.get('next_cursor')
-
-            if not next_cursor or len(data) < 100:
-                break
-
-        # Format for frontend (name + code only)
-        formatted = [
+        banks = [
             {'name': b['name'], 'code': b['code']}
-            for b in all_banks
+            for b in payload.get('data', [])
             if b.get('active') and b.get('currency') == 'NGN'
         ]
 
-        # Cache the result
-        BANK_CACHE['banks'] = formatted
+        BANK_CACHE['banks'] = banks
         BANK_CACHE['fetched_at'] = now
+        return jsonify(banks)
 
-        return jsonify(formatted)
-
+    except requests.exceptions.HTTPError as e:
+        print(f"[BANKS] HTTP error {e.response.status_code}: {e.response.text[:200]}")
+        return jsonify([])
     except Exception as e:
-        print(f'Paystack list banks error: {e}')
+        print(f"[BANKS] Unexpected error: {e}")
         return jsonify([])
 
 
 @app.route('/api/paystack/verify-account')
 @verified_required
 def api_paystack_verify_account():
-    if not paystack:
+    """Resolve an account name from a bank account number."""
+    if not paystack or not PAYSTACK_SECRET_KEY:
         return jsonify({'error': 'Paystack not configured'}), 500
 
     account_number = request.args.get('account_number', '').strip()
@@ -687,20 +685,85 @@ def api_paystack_verify_account():
         return jsonify({'error': 'Invalid account number or bank'}), 400
 
     try:
-        response = paystack.verification.resolve_account(
-            account_number=account_number,
-            bank_code=bank_code,
+        r = requests.get(
+            'https://api.paystack.co/bank/resolve',
+            headers={'Authorization': f'Bearer {PAYSTACK_SECRET_KEY}'},
+            params={'account_number': account_number, 'bank_code': bank_code},
+            timeout=10,
         )
-        if response.get('status'):
-            # This is a REAL verification from Paystack
+
+        payload = r.json()
+
+        if payload.get('status'):
+            data = payload['data']
             return jsonify({
-                'account_name': response['data']['account_name'],
-                'account_number': response['data']['account_number'],
-                'bank_id': response['data'].get('bank_id'),
+                'account_name': data['account_name'],
+                'account_number': data['account_number'],
             })
-        return jsonify({'error': response.get('message', 'Could not verify')}), 400
+
+        # This is the most common failure — account not found OR account not verified
+        print(f"[VERIFY] Paystack rejected: {payload.get('message')}")
+        return jsonify({
+            'error': payload.get('message', 'Could not verify account'),
+        }), 400
+
     except Exception as e:
-        return jsonify({'error': str(e)}), 400
+        print(f"[VERIFY] Error: {e}")
+        return jsonify({'error': 'Verification failed'}), 500
+
+@app.route('/api/paystack/diagnose')
+@verified_required
+def api_paystack_diagnose():
+    """Diagnostic — shows exactly what Paystack says about your account."""
+    if not PAYSTACK_SECRET_KEY:
+        return jsonify({
+            'step': 'no_key',
+            'message': 'PAYSTACK_SECRET_KEY env var is not set on Railway',
+        })
+
+    # Show what kind of key you're using (test vs live) without revealing it
+    key_type = 'test' if PAYSTACK_SECRET_KEY.startswith('sk_test_') else \
+               'live' if PAYSTACK_SECRET_KEY.startswith('sk_live_') else \
+               'unknown'
+
+    try:
+        # Test 1: Can we reach Paystack at all?
+        health = requests.get(
+            'https://api.paystack.co/bank?country=nigeria&currency=NGN&perPage=10',
+            headers={'Authorization': f'Bearer {PAYSTACK_SECRET_KEY}'},
+            timeout=10,
+        )
+
+        result = {
+            'key_type': key_type,
+            'http_status': health.status_code,
+        }
+
+        payload = health.json()
+        result['paystack_status'] = payload.get('status')
+        result['paystack_message'] = payload.get('message')
+
+        if payload.get('status') and payload.get('data'):
+            result['bank_count'] = len(payload['data'])
+            result['first_3_banks'] = [b['name'] for b in payload['data'][:3]]
+            result['verdict'] = '✅ Account is verified — banks load correctly'
+        elif payload.get('status') and not payload.get('data'):
+            result['verdict'] = '⚠ API works but returned 0 banks — account not verified yet'
+        else:
+            result['verdict'] = (
+                f'❌ Paystack rejected: {payload.get("message", "unknown")}. '
+                'Most likely your account is not yet verified — check '
+                'dashboard.paystack.com → Compliance'
+            )
+
+        return jsonify(result)
+
+    except Exception as e:
+        return jsonify({
+            'step': 'request_failed',
+            'error': str(e),
+            'verdict': '❌ Could not reach Paystack API at all',
+        })
 
 
 @app.route('/api/me/subaccount', methods=['POST'])
