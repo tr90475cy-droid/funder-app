@@ -1,6 +1,7 @@
 (() => {
   'use strict';
 
+  // ── Element refs ──
   const gridEl         = document.getElementById('marketGrid');
   const featuredGrid   = document.getElementById('featuredGrid');
   const featuredSec    = document.getElementById('featuredSection');
@@ -27,7 +28,6 @@
   const buyItemCard    = document.getElementById('buyItemCard');
   const buyProceedBtn  = document.getElementById('buyProceedBtn');
 
-  // Promote
   const promoteModal        = document.getElementById('promoteModal');
   const promoteClose        = document.getElementById('promoteClose');
   const promoPricing        = document.getElementById('promoPricing');
@@ -37,13 +37,17 @@
   const transferDetails     = document.getElementById('transferDetails');
   const promoDoneBtn        = document.getElementById('promoDoneBtn');
 
-  let currentCategory = 'all';
-  let pendingBuyId = null;
-  let pendingPromoteId = null;
-  let selectedTier = null;
-  let banks = [];
-  let verifiedAccount = null;
-  let pricingLoaded = false;
+  // ── State ──
+  let currentCategory   = 'all';
+  let pendingBuyId      = null;
+  let pendingPromoteId  = null;
+  let selectedTier      = null;
+  let banks             = [];
+  let banksLoaded       = false;
+  let verifiedAccount   = null;
+  let pricingLoaded     = false;
+  let verifyTimer       = null;
+  let verifyRequestId   = 0;
 
   function esc(s) {
     return String(s == null ? '' : s).replace(/[&<>"']/g, m => ({
@@ -51,9 +55,9 @@
     }[m]));
   }
 
-  // ═══════════════════════════════════════
-  // LOAD LISTINGS
-  // ═══════════════════════════════════════
+  // ═══════════════════════════════════════════════════
+  // LISTINGS
+  // ═══════════════════════════════════════════════════
   async function loadListings() {
     gridEl.innerHTML = '<div class="empty">Loading…</div>';
     try {
@@ -61,7 +65,7 @@
       const items = await r.json();
 
       const featured = items.filter(l => l.featured && !l.sold);
-      const regular = items.filter(l => !l.featured || l.sold);
+      const regular  = items.filter(l => !l.featured || l.sold);
 
       if (featured.length) {
         featuredSec.classList.remove('hidden');
@@ -121,7 +125,7 @@
     `;
   }
 
-  // Global click handler (buy / sold / promote)
+  // Global click handler for cards
   document.addEventListener('click', async (e) => {
     const buyBtn = e.target.closest('[data-buy]');
     if (buyBtn) {
@@ -141,9 +145,9 @@
     }
   });
 
-  // ═══════════════════════════════════════
-  // BUY FLOW
-  // ═══════════════════════════════════════
+  // ═══════════════════════════════════════════════════
+  // BUY
+  // ═══════════════════════════════════════════════════
   async function openBuyModal(id) {
     pendingBuyId = id;
     buyModal.classList.add('open');
@@ -201,9 +205,9 @@
     }
   });
 
-  // ═══════════════════════════════════════
-  // PROMOTE FLOW
-  // ═══════════════════════════════════════
+  // ═══════════════════════════════════════════════════
+  // PROMOTE
+  // ═══════════════════════════════════════════════════
   async function openPromoteModal(listingId) {
     pendingPromoteId = listingId;
     selectedTier = null;
@@ -276,7 +280,6 @@
       const data = await r.json();
 
       if (data.account_number) {
-        // Switch to payment step
         promoSelectionStep.classList.add('hidden');
         promoPaymentStep.classList.remove('hidden');
 
@@ -315,9 +318,9 @@
     loadListings();
   });
 
-  // ═══════════════════════════════════════
+  // ═══════════════════════════════════════════════════
   // CATEGORY CHIPS
-  // ═══════════════════════════════════════
+  // ═══════════════════════════════════════════════════
   chipsEl.addEventListener('click', (e) => {
     const chip = e.target.closest('.chip');
     if (!chip || chip.classList.contains('active')) return;
@@ -327,9 +330,9 @@
     loadListings();
   });
 
-  // ═══════════════════════════════════════
+  // ═══════════════════════════════════════════════════
   // NEW LISTING
-  // ═══════════════════════════════════════
+  // ═══════════════════════════════════════════════════
   newListingBtn.addEventListener('click', async () => {
     const hasPayments = await checkSellerSetup();
     if (!hasPayments) {
@@ -377,9 +380,9 @@
     }
   });
 
-  // ═══════════════════════════════════════
+  // ═══════════════════════════════════════════════════
   // SELLER BANK SETUP
-  // ═══════════════════════════════════════
+  // ═══════════════════════════════════════════════════
   async function checkSellerSetup() {
     try {
       const r = await fetch('/api/me/subaccount-status');
@@ -405,13 +408,23 @@
     accountNumber.value = '';
     verifiedAccount = null;
     bankSave.disabled = true;
+    verifyHint.textContent = 'Enter a 10-digit account number to verify.';
 
-    if (!banks.length) {
+    if (!banksLoaded) {
+      bankSelect.innerHTML = '<option value="">Loading banks…</option>';
       try {
         const r = await fetch('/api/paystack/banks');
-        banks = await r.json();
+        const list = await r.json();
+
+        if (!Array.isArray(list) || list.length === 0) {
+          bankSelect.innerHTML = '<option value="">No banks available — try again later</option>';
+          return;
+        }
+
+        banks = list;
+        banksLoaded = true;
         bankSelect.innerHTML = '<option value="">Select bank</option>' +
-          banks.map(b => `<option value="${b.code}">${esc(b.name)}</option>`).join('');
+          banks.map(b => `<option value="${esc(b.code)}">${esc(b.name)}</option>`).join('');
       } catch {
         bankSelect.innerHTML = '<option value="">Could not load banks</option>';
       }
@@ -428,25 +441,48 @@
 
   accountNumber.addEventListener('input', () => {
     accountNumber.value = accountNumber.value.replace(/\D/g, '').slice(0, 10);
-    verifyAccount();
+    // Reset state, then schedule verification
+    clearTimeout(verifyTimer);
+    accountName.value = '';
+    verifiedAccount = null;
+    bankSave.disabled = true;
+
+    if (accountNumber.value.length !== 10 || !bankSelect.value) {
+      verifyHint.textContent = 'Enter a 10-digit account number to verify.';
+      return;
+    }
+
+    verifyHint.textContent = 'Verifying…';
+    verifyTimer = setTimeout(verifyAccount, 350);
   });
 
-  bankSelect.addEventListener('change', verifyAccount);
+  bankSelect.addEventListener('change', () => {
+    clearTimeout(verifyTimer);
+    accountName.value = '';
+    verifiedAccount = null;
+    bankSave.disabled = true;
+    if (accountNumber.value.length === 10 && bankSelect.value) {
+      verifyHint.textContent = 'Verifying…';
+      verifyTimer = setTimeout(verifyAccount, 200);
+    } else {
+      verifyHint.textContent = 'Enter a 10-digit account number to verify.';
+    }
+  });
 
   async function verifyAccount() {
     const num = accountNumber.value;
     const bank = bankSelect.value;
-    if (num.length !== 10 || !bank) {
-      accountName.value = '';
-      verifyHint.textContent = 'Enter a 10-digit account number to verify.';
-      bankSave.disabled = true;
-      verifiedAccount = null;
-      return;
-    }
-    verifyHint.textContent = 'Verifying…';
+    if (num.length !== 10 || !bank) return;
+
+    const thisRequest = ++verifyRequestId;
+
     try {
-      const r = await fetch('/api/paystack/verify-account?account_number=' + num + '&bank_code=' + bank);
+      const r = await fetch('/api/paystack/verify-account?account_number=' + encodeURIComponent(num) + '&bank_code=' + encodeURIComponent(bank));
       const data = await r.json();
+
+      // Ignore if a newer request has started
+      if (thisRequest !== verifyRequestId) return;
+
       if (data.account_name) {
         accountName.value = data.account_name;
         verifiedAccount = { account_number: num, bank_code: bank, account_name: data.account_name };
@@ -454,14 +490,16 @@
         bankSave.disabled = false;
       } else {
         accountName.value = '';
-        verifyHint.textContent = 'Could not verify. Check details and try again.';
-        bankSave.disabled = true;
         verifiedAccount = null;
+        verifyHint.textContent = data.error || 'Could not verify. Check details and try again.';
+        bankSave.disabled = true;
       }
     } catch {
-      verifyHint.textContent = 'Verification failed. Try again.';
-      bankSave.disabled = true;
+      if (thisRequest !== verifyRequestId) return;
+      accountName.value = '';
       verifiedAccount = null;
+      verifyHint.textContent = 'Verification failed. Please try again.';
+      bankSave.disabled = true;
     }
   }
 
@@ -473,7 +511,10 @@
       const r = await fetch('/api/me/subaccount', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ ...verifiedAccount, date_of_birth: dobField.value || '2000-01-01' })
+        body: JSON.stringify({
+          ...verifiedAccount,
+          date_of_birth: dobField.value || '2000-01-01'
+        })
       });
       const data = await r.json();
       if (data.ok) {
@@ -492,10 +533,9 @@
     }
   });
 
-  // ═══════════════════════════════════════
+  // ═══════════════════════════════════════════════════
   // INIT
-  // ═══════════════════════════════════════
+  // ═══════════════════════════════════════════════════
   loadListings();
   checkSellerSetup();
-
 })();
