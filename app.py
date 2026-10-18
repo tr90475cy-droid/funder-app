@@ -608,17 +608,69 @@ def api_subaccount_status():
     return jsonify({'has_subaccount': has})
 
 
+# In app.py
+
+# Simple in-memory cache for the full bank list
+BANK_CACHE = {'banks': None, 'fetched_at': None}
+CACHE_TTL_HOURS = 6
+
 @app.route('/api/paystack/banks')
 @verified_required
 def api_paystack_banks():
     if not paystack:
         return jsonify([])
+
+    # Return cached list if still fresh
+    now = datetime.utcnow()
+    if BANK_CACHE['banks'] and BANK_CACHE['fetched_at']:
+        age_hours = (now - BANK_CACHE['fetched_at']).total_seconds() / 3600
+        if age_hours < CACHE_TTL_HOURS:
+            return jsonify(BANK_CACHE['banks'])
+
     try:
-        response = paystack.misc.list_banks()
-        data = response.get('data', [])
-        return jsonify([{'name': b['name'], 'code': b['code']} for b in data])
+        all_banks = []
+        next_cursor = None
+
+        # Loop through all pages of banks
+        while True:
+            kwargs = {
+                'country': 'nigeria',
+                'use_cursor': True,
+                'per_page': 100,
+            }
+            if next_cursor:
+                kwargs['next_cursor'] = next_cursor
+
+            response = paystack.misc.list_banks(**kwargs)
+
+            if not response.get('status'):
+                break
+
+            data = response.get('data', [])
+            all_banks.extend(data)
+
+            # Check if there's a next page
+            meta = response.get('meta', {})
+            next_cursor = meta.get('next_cursor')
+
+            if not next_cursor or len(data) < 100:
+                break
+
+        # Format for frontend (name + code only)
+        formatted = [
+            {'name': b['name'], 'code': b['code']}
+            for b in all_banks
+            if b.get('active') and b.get('currency') == 'NGN'
+        ]
+
+        # Cache the result
+        BANK_CACHE['banks'] = formatted
+        BANK_CACHE['fetched_at'] = now
+
+        return jsonify(formatted)
+
     except Exception as e:
-        print(f'Paystack banks error: {e}')
+        print(f'Paystack list banks error: {e}')
         return jsonify([])
 
 
@@ -632,14 +684,21 @@ def api_paystack_verify_account():
     bank_code = request.args.get('bank_code', '').strip()
 
     if len(account_number) != 10 or not bank_code:
-        return jsonify({'error': 'Invalid input'}), 400
+        return jsonify({'error': 'Invalid account number or bank'}), 400
 
     try:
         response = paystack.verification.resolve_account(
-            account_number=account_number, bank_code=bank_code)
+            account_number=account_number,
+            bank_code=bank_code,
+        )
         if response.get('status'):
-            return jsonify({'account_name': response['data']['account_name']})
-        return jsonify({'error': 'Could not verify'}), 400
+            # This is a REAL verification from Paystack
+            return jsonify({
+                'account_name': response['data']['account_name'],
+                'account_number': response['data']['account_number'],
+                'bank_id': response['data'].get('bank_id'),
+            })
+        return jsonify({'error': response.get('message', 'Could not verify')}), 400
     except Exception as e:
         return jsonify({'error': str(e)}), 400
 
