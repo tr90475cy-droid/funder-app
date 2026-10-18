@@ -612,7 +612,7 @@ def api_paystack_banks():
     if not paystack:
         return jsonify([])
     try:
-        response = paystack.bank.list()
+        response = paystack.misc.list_banks()
         data = response.get('data', [])
         return jsonify([{'name': b['name'], 'code': b['code']} for b in data])
     except Exception as e:
@@ -633,7 +633,7 @@ def api_paystack_verify_account():
         return jsonify({'error': 'Invalid input'}), 400
 
     try:
-        response = paystack.account.verify(
+        response = paystack.verification.resolve_account(
             account_number=account_number,
             bank_code=bank_code,
         )
@@ -655,9 +655,8 @@ def api_me_subaccount():
     account_number = d.get('account_number', '').strip()
     bank_code = d.get('bank_code', '').strip()
     account_name = d.get('account_name', '').strip()
-    dob = d.get('date_of_birth', '').strip()
 
-    if not all([account_number, bank_code, account_name, dob]):
+    if not all([account_number, bank_code, account_name]):
         return jsonify({'error': 'All fields required'}), 400
 
     try:
@@ -722,7 +721,11 @@ def buy_listing(listing_id):
     email=buyer.email,
     amount=int(listing.price * 100),
     callback_url=url_for('market', _external=True),
-    metadata={'listing_id': listing.id, 'buyer_id': buyer.id, 'seller_id': listing.seller.id},
+    metadata={
+        'listing_id': listing.id,
+        'buyer_id': buyer.id,
+        'seller_id': listing.seller.id,
+    },
 )
 
         if response.get('status'):

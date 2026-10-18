@@ -9,4 +9,4 @@ requests==2.31.0
 gunicorn==21.2.0
 simple-websocket==1.0.0
 python-dotenv==1.0.0
-paystackapi==1.0.5
+paystackapi==2.1.3
