@@ -157,6 +157,50 @@
   </div>
 </div>
 
+<!-- ═══════════════════════════════════════════
+     PROMOTE LISTING MODAL (with bank transfer)
+     ═══════════════════════════════════════════ -->
+<div class="modal-back" id="promoteModal">
+  <div class="modal">
+    <div class="modal-head">
+      <button class="modal-close" id="promoteClose">✕</button>
+      <div class="modal-title">Promote listing</div>
+      <div class="modal-head-spacer"></div>
+    </div>
+
+    <!-- Step 1: choose duration -->
+    <div id="promoSelectionStep">
+      <p class="field-hint" style="margin-bottom: 14px;">
+        Boost your listing to the top of the marketplace.
+        Pay per day — cheaper for longer runs.
+      </p>
+      <div class="promo-tiers" id="promoPricing">
+        <div class="empty">Loading prices…</div>
+      </div>
+      <button class="btn btn-primary btn-block" id="promoteProceedBtn" disabled style="margin-top: 16px;">
+        Select a duration
+      </button>
+    </div>
+
+    <!-- Step 2: show bank transfer details -->
+    <div id="promoPaymentStep" class="hidden">
+      <p class="field-hint" style="margin-bottom: 14px;">
+        Transfer the exact amount to the account below.
+        Your promotion starts automatically once payment is confirmed.
+      </p>
+      <div class="transfer-details-card" id="transferDetails">
+        <!-- Injected by JS -->
+      </div>
+      <button class="btn btn-primary btn-block" id="promoDoneBtn" style="margin-top: 16px;">
+        I have sent the money
+      </button>
+      <p class="field-hint" style="text-align: center; margin-top: 10px;">
+        Your listing will be featured within 2–3 minutes after payment.
+      </p>
+    </div>
+  </div>
+</div>
+
 {% endblock %}
 {% block scripts %}
 <script src="{{ url_for('static', filename='js/market.js') }}"></script>

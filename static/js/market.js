@@ -11,7 +11,6 @@
   const listingForm    = document.getElementById('listingForm');
   const newListingBtn  = document.getElementById('newListingBtn');
 
-  // Seller payments
   const sellerBanner   = document.getElementById('sellerBanner');
   const setupBankBtn   = document.getElementById('setupBankBtn');
   const bankModal      = document.getElementById('bankSetupModal');
@@ -23,17 +22,28 @@
   const verifyHint     = document.getElementById('verifyHint');
   const dobField       = document.getElementById('dobField');
 
-  // Buy modal
   const buyModal       = document.getElementById('buyModal');
   const buyClose       = document.getElementById('buyClose');
-  const buyContent     = document.getElementById('buyContent');
   const buyItemCard    = document.getElementById('buyItemCard');
   const buyProceedBtn  = document.getElementById('buyProceedBtn');
 
+  // Promote
+  const promoteModal        = document.getElementById('promoteModal');
+  const promoteClose        = document.getElementById('promoteClose');
+  const promoPricing        = document.getElementById('promoPricing');
+  const promoteProceedBtn   = document.getElementById('promoteProceedBtn');
+  const promoSelectionStep  = document.getElementById('promoSelectionStep');
+  const promoPaymentStep    = document.getElementById('promoPaymentStep');
+  const transferDetails     = document.getElementById('transferDetails');
+  const promoDoneBtn        = document.getElementById('promoDoneBtn');
+
   let currentCategory = 'all';
   let pendingBuyId = null;
+  let pendingPromoteId = null;
+  let selectedTier = null;
   let banks = [];
   let verifiedAccount = null;
+  let pricingLoaded = false;
 
   function esc(s) {
     return String(s == null ? '' : s).replace(/[&<>"']/g, m => ({
@@ -53,7 +63,6 @@
       const featured = items.filter(l => l.featured && !l.sold);
       const regular = items.filter(l => !l.featured || l.sold);
 
-      // Featured section
       if (featured.length) {
         featuredSec.classList.remove('hidden');
         featuredGrid.innerHTML = featured.map(l => listingHtml(l, true)).join('');
@@ -62,13 +71,12 @@
         featuredGrid.innerHTML = '';
       }
 
-      // Regular grid
       if (!regular.length && !featured.length) {
         gridEl.innerHTML = '<div class="empty">No listings in this category yet.</div>';
         return;
       }
       gridEl.innerHTML = regular.map(l => listingHtml(l, false)).join('');
-    } catch (e) {
+    } catch {
       gridEl.innerHTML = '<div class="empty">Could not load listings.</div>';
     }
   }
@@ -82,10 +90,18 @@
 
     let actionHtml = '';
 
-    if (!l.mine && !l.sold) {
+    if (l.mine) {
+      if (l.sold) {
+        actionHtml = `<button class="listing-sold-btn" data-sold="${l.id}">Mark available</button>`;
+      } else {
+        actionHtml = `
+          <button class="listing-sold-btn" data-sold="${l.id}">Mark sold</button>
+          <button class="listing-promote-btn" data-promote="${l.id}">
+            ${l.featured ? `⭐ Boosted · ${l.days_remaining}d left` : '🚀 Promote'}
+          </button>`;
+      }
+    } else if (!l.sold) {
       actionHtml = `<button class="listing-buy-btn" data-buy="${l.id}">Buy now</button>`;
-    } else if (l.mine) {
-      actionHtml = `<button class="listing-sold-btn" data-sold="${l.id}">${l.sold ? 'Mark available' : 'Mark sold'}</button>`;
     }
 
     return `
@@ -105,7 +121,7 @@
     `;
   }
 
-  // Delegate clicks on listings grid (buy / mark sold)
+  // Global click handler (buy / sold / promote)
   document.addEventListener('click', async (e) => {
     const buyBtn = e.target.closest('[data-buy]');
     if (buyBtn) {
@@ -116,6 +132,12 @@
     if (soldBtn) {
       await fetch('/api/listings/' + soldBtn.dataset.sold + '/sold', { method: 'POST' });
       loadListings();
+      return;
+    }
+    const promoteBtn = e.target.closest('[data-promote]');
+    if (promoteBtn) {
+      openPromoteModal(parseInt(promoteBtn.dataset.promote, 10));
+      return;
     }
   });
 
@@ -130,8 +152,8 @@
 
     try {
       const r = await fetch('/api/listings/' + id);
+      if (!r.ok) throw new Error();
       const l = await r.json();
-
       buyItemCard.innerHTML = `
         <div class="buy-item">
           ${l.image ? `<img src="${esc(l.image)}" alt="">` : '<div class="buy-item-img-empty">📦</div>'}
@@ -162,7 +184,6 @@
     if (!pendingBuyId) return;
     buyProceedBtn.disabled = true;
     buyProceedBtn.textContent = 'Opening Paystack…';
-
     try {
       const r = await fetch('/api/market/buy/' + pendingBuyId, { method: 'POST' });
       const data = await r.json();
@@ -181,6 +202,120 @@
   });
 
   // ═══════════════════════════════════════
+  // PROMOTE FLOW
+  // ═══════════════════════════════════════
+  async function openPromoteModal(listingId) {
+    pendingPromoteId = listingId;
+    selectedTier = null;
+    promoteProceedBtn.disabled = true;
+    promoteProceedBtn.textContent = 'Select a duration';
+    promoSelectionStep.classList.remove('hidden');
+    promoPaymentStep.classList.add('hidden');
+    promoteModal.classList.add('open');
+    document.body.style.overflow = 'hidden';
+
+    if (!pricingLoaded) {
+      try {
+        const r = await fetch('/api/ads/pricing');
+        const tiers = await r.json();
+        renderPricingTiers(tiers);
+        pricingLoaded = true;
+      } catch {
+        promoPricing.innerHTML = '<div class="empty">Could not load prices.</div>';
+      }
+    }
+  }
+
+  function renderPricingTiers(tiers) {
+    promoPricing.innerHTML = tiers.map(t => `
+      <button class="promo-tier" data-days="${t.days}" data-price="${t.price}">
+        <div class="promo-tier-days">${t.days} day${t.days !== 1 ? 's' : ''}</div>
+        <div class="promo-tier-price">₦${t.price.toLocaleString()}</div>
+        <div class="promo-tier-per">₦${t.per_day}/day</div>
+        ${t.saving ? `<div class="promo-tier-saving">Save ₦${t.saving.toLocaleString()}</div>` : ''}
+      </button>
+    `).join('');
+
+    promoPricing.querySelectorAll('.promo-tier').forEach(btn => {
+      btn.addEventListener('click', () => {
+        promoPricing.querySelectorAll('.promo-tier').forEach(b => b.classList.remove('selected'));
+        btn.classList.add('selected');
+        selectedTier = {
+          days: parseInt(btn.dataset.days, 10),
+          price: parseFloat(btn.dataset.price),
+        };
+        promoteProceedBtn.disabled = false;
+        promoteProceedBtn.textContent = `Pay ₦${selectedTier.price.toLocaleString()} for ${selectedTier.days} day${selectedTier.days !== 1 ? 's' : ''}`;
+      });
+    });
+  }
+
+  function closePromoteModal() {
+    promoteModal.classList.remove('open');
+    document.body.style.overflow = '';
+    pendingPromoteId = null;
+    selectedTier = null;
+  }
+
+  promoteClose.addEventListener('click', closePromoteModal);
+  promoteModal.addEventListener('click', (e) => {
+    if (e.target === promoteModal) closePromoteModal();
+  });
+
+  promoteProceedBtn.addEventListener('click', async () => {
+    if (!pendingPromoteId || !selectedTier) return;
+    promoteProceedBtn.disabled = true;
+    promoteProceedBtn.textContent = 'Generating account…';
+
+    try {
+      const r = await fetch('/api/market/promote/' + pendingPromoteId, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ days: selectedTier.days })
+      });
+      const data = await r.json();
+
+      if (data.account_number) {
+        // Switch to payment step
+        promoSelectionStep.classList.add('hidden');
+        promoPaymentStep.classList.remove('hidden');
+
+        transferDetails.innerHTML = `
+          <div class="transfer-row">
+            <span>Bank</span>
+            <strong>${esc(data.bank_name)}</strong>
+          </div>
+          <div class="transfer-row">
+            <span>Account Number</span>
+            <strong class="transfer-account-number">${esc(data.account_number)}</strong>
+          </div>
+          <div class="transfer-row">
+            <span>Account Name</span>
+            <strong>${esc(data.account_name)}</strong>
+          </div>
+          <div class="transfer-row transfer-row-highlight">
+            <span>Amount</span>
+            <strong class="transfer-amount">₦${Number(data.amount).toLocaleString()}</strong>
+          </div>
+        `;
+      } else {
+        alert(data.error || 'Could not generate account details.');
+        promoteProceedBtn.disabled = false;
+        promoteProceedBtn.textContent = `Pay ₦${selectedTier.price.toLocaleString()}`;
+      }
+    } catch {
+      alert('An error occurred. Please try again.');
+      promoteProceedBtn.disabled = false;
+      promoteProceedBtn.textContent = `Pay ₦${selectedTier.price.toLocaleString()}`;
+    }
+  });
+
+  promoDoneBtn.addEventListener('click', () => {
+    closePromoteModal();
+    loadListings();
+  });
+
+  // ═══════════════════════════════════════
   // CATEGORY CHIPS
   // ═══════════════════════════════════════
   chipsEl.addEventListener('click', (e) => {
@@ -196,7 +331,6 @@
   // NEW LISTING
   // ═══════════════════════════════════════
   newListingBtn.addEventListener('click', async () => {
-    // Check if seller has payments set up
     const hasPayments = await checkSellerSetup();
     if (!hasPayments) {
       if (confirm('You need to set up your bank details to sell. Do that now?')) {
@@ -228,7 +362,6 @@
     if (!fd.get('title') || !fd.get('price')) return;
     listingPost.disabled = true;
     listingPost.textContent = 'Posting…';
-
     try {
       const r = await fetch('/api/listings', { method: 'POST', body: fd });
       if (r.ok) {
@@ -245,7 +378,7 @@
   });
 
   // ═══════════════════════════════════════
-  // SELLER SETUP
+  // SELLER BANK SETUP
   // ═══════════════════════════════════════
   async function checkSellerSetup() {
     try {
@@ -310,7 +443,6 @@
       verifiedAccount = null;
       return;
     }
-
     verifyHint.textContent = 'Verifying…';
     try {
       const r = await fetch('/api/paystack/verify-account?account_number=' + num + '&bank_code=' + bank);
@@ -335,27 +467,17 @@
 
   bankSave.addEventListener('click', async () => {
     if (!verifiedAccount) return;
-
-    if (!dobField.value) {
-      alert('Please enter your date of birth (required by Paystack).');
-      return;
-    }
-
     bankSave.disabled = true;
     bankSave.textContent = 'Saving…';
-
     try {
       const r = await fetch('/api/me/subaccount', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          ...verifiedAccount,
-          date_of_birth: dobField.value,
-        })
+        body: JSON.stringify({ ...verifiedAccount, date_of_birth: dobField.value || '2000-01-01' })
       });
       const data = await r.json();
       if (data.ok) {
-        alert('✓ Payments set up! You can now create listings and receive money directly.');
+        alert('✓ Payments set up! You can now receive money for your sales.');
         closeBankModal();
         sellerBanner.classList.add('hidden');
       } else {
@@ -375,4 +497,5 @@
   // ═══════════════════════════════════════
   loadListings();
   checkSellerSetup();
+
 })();
