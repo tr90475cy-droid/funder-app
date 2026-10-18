@@ -1685,6 +1685,7 @@ def api_debug_users():
 # INIT
 # ─────────────────────────────────────────────
 with app.app_context():
+    db.drop_all()      
     db.create_all()
 
     admin_email = os.environ.get('ADMIN_EMAIL', 'oladipobright12@gmail.com')
