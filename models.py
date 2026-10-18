@@ -4,9 +4,6 @@ from flask_sqlalchemy import SQLAlchemy
 db = SQLAlchemy()
 
 
-# ─────────────────────────────────────────────
-# USERS
-# ─────────────────────────────────────────────
 class User(db.Model):
     __tablename__ = 'users'
     id = db.Column(db.Integer, primary_key=True)
@@ -19,26 +16,16 @@ class User(db.Model):
     bio = db.Column(db.String(200))
     avatar_seed = db.Column(db.String(40))
     profile_picture_path = db.Column(db.String(255))
-
-    # Paystack
     subaccount_code = db.Column(db.String(50), index=True)
     paystack_recipient_code = db.Column(db.String(50))
-
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
 
-    verification = db.relationship(
-        'StudentVerification',
-        backref='user',
-        uselist=False,
-        foreign_keys='StudentVerification.user_id',
-        cascade='all, delete-orphan'
-    )
+    verification = db.relationship('StudentVerification', backref='user', uselist=False,
+                                   foreign_keys='StudentVerification.user_id',
+                                   cascade='all, delete-orphan')
     posts = db.relationship('Post', backref='author', cascade='all, delete-orphan')
 
 
-# ─────────────────────────────────────────────
-# STUDENT VERIFICATION
-# ─────────────────────────────────────────────
 class StudentVerification(db.Model):
     __tablename__ = 'student_verifications'
     id = db.Column(db.Integer, primary_key=True)
@@ -58,9 +45,6 @@ class StudentVerification(db.Model):
     reviewed_by = db.Column(db.Integer, db.ForeignKey('users.id'))
 
 
-# ─────────────────────────────────────────────
-# POSTS
-# ─────────────────────────────────────────────
 class Post(db.Model):
     __tablename__ = 'posts'
     id = db.Column(db.Integer, primary_key=True)
@@ -72,32 +56,19 @@ class Post(db.Model):
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
 
     likes = db.relationship('Like', backref='post', cascade='all, delete-orphan')
-    comments = db.relationship(
-        'Comment',
-        backref='post',
-        cascade='all, delete-orphan',
-        order_by='Comment.created_at'
-    )
+    comments = db.relationship('Comment', backref='post', cascade='all, delete-orphan',
+                               order_by='Comment.created_at')
 
 
-# ─────────────────────────────────────────────
-# LIKES
-# ─────────────────────────────────────────────
 class Like(db.Model):
     __tablename__ = 'likes'
     id = db.Column(db.Integer, primary_key=True)
     user_id = db.Column(db.Integer, db.ForeignKey('users.id'), nullable=False)
     post_id = db.Column(db.Integer, db.ForeignKey('posts.id'), nullable=False)
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
-
-    __table_args__ = (
-        db.UniqueConstraint('user_id', 'post_id', name='uq_user_post_like'),
-    )
+    __table_args__ = (db.UniqueConstraint('user_id', 'post_id', name='uq_user_post_like'),)
 
 
-# ─────────────────────────────────────────────
-# COMMENTS
-# ─────────────────────────────────────────────
 class Comment(db.Model):
     __tablename__ = 'comments'
     id = db.Column(db.Integer, primary_key=True)
@@ -110,9 +81,6 @@ class Comment(db.Model):
     user = db.relationship('User', foreign_keys=[user_id])
 
 
-# ─────────────────────────────────────────────
-# CHAT ROOMS
-# ─────────────────────────────────────────────
 class ChatRoom(db.Model):
     __tablename__ = 'chat_rooms'
     id = db.Column(db.Integer, primary_key=True)
@@ -121,39 +89,22 @@ class ChatRoom(db.Model):
     dm_key = db.Column(db.String(50), unique=True)
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
 
-    messages = db.relationship(
-        'ChatMessage',
-        backref='room',
-        cascade='all, delete-orphan',
-        order_by='ChatMessage.created_at'
-    )
-    members = db.relationship(
-        'ChatMember',
-        backref='room',
-        cascade='all, delete-orphan'
-    )
+    messages = db.relationship('ChatMessage', backref='room', cascade='all, delete-orphan',
+                               order_by='ChatMessage.created_at')
+    members = db.relationship('ChatMember', backref='room', cascade='all, delete-orphan')
 
 
-# ─────────────────────────────────────────────
-# CHAT MEMBERS
-# ─────────────────────────────────────────────
 class ChatMember(db.Model):
     __tablename__ = 'chat_members'
     id = db.Column(db.Integer, primary_key=True)
     room_id = db.Column(db.Integer, db.ForeignKey('chat_rooms.id'), nullable=False)
     user_id = db.Column(db.Integer, db.ForeignKey('users.id'), nullable=False)
     joined_at = db.Column(db.DateTime, default=datetime.utcnow)
-
-    __table_args__ = (
-        db.UniqueConstraint('room_id', 'user_id', name='uq_room_user'),
-    )
+    __table_args__ = (db.UniqueConstraint('room_id', 'user_id', name='uq_room_user'),)
 
     user = db.relationship('User')
 
 
-# ─────────────────────────────────────────────
-# CHAT MESSAGES
-# ─────────────────────────────────────────────
 class ChatMessage(db.Model):
     __tablename__ = 'chat_messages'
     id = db.Column(db.Integer, primary_key=True)
@@ -165,9 +116,6 @@ class ChatMessage(db.Model):
     user = db.relationship('User')
 
 
-# ─────────────────────────────────────────────
-# MARKETPLACE LISTINGS
-# ─────────────────────────────────────────────
 class Listing(db.Model):
     __tablename__ = 'listings'
     id = db.Column(db.Integer, primary_key=True)
@@ -179,8 +127,14 @@ class Listing(db.Model):
     image_path = db.Column(db.String(255))
     sold = db.Column(db.Boolean, default=False)
 
-    # Paystack / promoted listings
+    # Ad promotion fields
     featured = db.Column(db.Boolean, default=False, index=True)
+    featured_until = db.Column(db.DateTime, index=True)
+    featured_days = db.Column(db.Integer, default=0)
+    featured_amount_paid = db.Column(db.Float, default=0)
+    featured_last_payment_ref = db.Column(db.String(100))
+
+    # Sale tracking
     sold_at = db.Column(db.DateTime)
     buyer_id = db.Column(db.Integer, db.ForeignKey('users.id'))
     payment_reference = db.Column(db.String(100), index=True)
@@ -191,9 +145,6 @@ class Listing(db.Model):
     buyer = db.relationship('User', foreign_keys=[buyer_id])
 
 
-# ─────────────────────────────────────────────
-# ASSIGNMENTS
-# ─────────────────────────────────────────────
 class Assignment(db.Model):
     __tablename__ = 'assignments'
     id = db.Column(db.Integer, primary_key=True)
@@ -211,9 +162,6 @@ class Assignment(db.Model):
     user = db.relationship('User')
 
 
-# ─────────────────────────────────────────────
-# EVENTS / PARTIES
-# ─────────────────────────────────────────────
 class Event(db.Model):
     __tablename__ = 'events'
     id = db.Column(db.Integer, primary_key=True)
@@ -229,24 +177,15 @@ class Event(db.Model):
     rsvps = db.relationship('EventRSVP', backref='event', cascade='all, delete-orphan')
 
 
-# ─────────────────────────────────────────────
-# EVENT RSVPs
-# ─────────────────────────────────────────────
 class EventRSVP(db.Model):
     __tablename__ = 'event_rsvps'
     id = db.Column(db.Integer, primary_key=True)
     event_id = db.Column(db.Integer, db.ForeignKey('events.id'), nullable=False)
     user_id = db.Column(db.Integer, db.ForeignKey('users.id'), nullable=False)
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
-
-    __table_args__ = (
-        db.UniqueConstraint('event_id', 'user_id', name='uq_event_user'),
-    )
+    __table_args__ = (db.UniqueConstraint('event_id', 'user_id', name='uq_event_user'),)
 
 
-# ─────────────────────────────────────────────
-# CONNECTIONS (Add Up)
-# ─────────────────────────────────────────────
 class Connection(db.Model):
     __tablename__ = 'connections'
     id = db.Column(db.Integer, primary_key=True)
@@ -258,32 +197,21 @@ class Connection(db.Model):
     requester = db.relationship('User', foreign_keys=[requester_id])
     recipient = db.relationship('User', foreign_keys=[recipient_id])
 
-    __table_args__ = (
-        db.UniqueConstraint('requester_id', 'recipient_id', name='uq_connection_pair'),
-    )
+    __table_args__ = (db.UniqueConstraint('requester_id', 'recipient_id', name='uq_connection_pair'),)
 
 
-# ─────────────────────────────────────────────
-# FOLLOW (one-way)
-# ─────────────────────────────────────────────
 class Follow(db.Model):
     __tablename__ = 'follows'
     id = db.Column(db.Integer, primary_key=True)
     follower_id = db.Column(db.Integer, db.ForeignKey('users.id'), nullable=False)
     following_id = db.Column(db.Integer, db.ForeignKey('users.id'), nullable=False)
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
-
-    __table_args__ = (
-        db.UniqueConstraint('follower_id', 'following_id', name='uq_follow_pair'),
-    )
+    __table_args__ = (db.UniqueConstraint('follower_id', 'following_id', name='uq_follow_pair'),)
 
     follower = db.relationship('User', foreign_keys=[follower_id])
     following = db.relationship('User', foreign_keys=[following_id])
 
 
-# ─────────────────────────────────────────────
-# PROFILE VIEWS
-# ─────────────────────────────────────────────
 class ProfileView(db.Model):
     __tablename__ = 'profile_views'
     id = db.Column(db.Integer, primary_key=True)
@@ -292,9 +220,6 @@ class ProfileView(db.Model):
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
 
 
-# ─────────────────────────────────────────────
-# ADMIN ACTION LOG
-# ─────────────────────────────────────────────
 class AdminAction(db.Model):
     __tablename__ = 'admin_actions'
     id = db.Column(db.Integer, primary_key=True)

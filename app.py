@@ -22,7 +22,7 @@ except ImportError:
     pass
 
 # ─────────────────────────────────────────────
-# PAYSTACK — Correct library
+# PAYSTACK
 # ─────────────────────────────────────────────
 try:
     from paystackapi.paystack import Paystack
@@ -42,6 +42,25 @@ else:
     print('⚠ PAYSTACK_SECRET_KEY not set — marketplace payments disabled')
 
 socketio = SocketIO(app, cors_allowed_origins='*', async_mode='threading')
+
+
+# ─────────────────────────────────────────────
+# AD PRICING (tiered, affordable for students)
+# ─────────────────────────────────────────────
+AD_PRICING = [
+    {'days': 1,  'price': 200,  'per_day': 200, 'label': 'Quick boost'},
+    {'days': 3,  'price': 500,  'per_day': 167, 'label': 'Weekend push', 'saving': 100},
+    {'days': 7,  'price': 1000, 'per_day': 143, 'label': 'Best value',   'saving': 400},
+    {'days': 14, 'price': 1800, 'per_day': 129, 'label': 'Two weeks',    'saving': 1000},
+    {'days': 30, 'price': 3000, 'per_day': 100, 'label': 'Full month',   'saving': 3000},
+]
+
+
+def get_ad_price(days):
+    for tier in AD_PRICING:
+        if tier['days'] == days:
+            return tier['price']
+    return days * 200
 
 
 # ─────────────────────────────────────────────
@@ -118,7 +137,7 @@ def time_ago(dt):
 
 
 # ─────────────────────────────────────────────
-# ADMIN SECURITY HELPERS
+# ADMIN SECURITY
 # ─────────────────────────────────────────────
 def admin_session_expired():
     last = session.get('admin_last_seen')
@@ -140,11 +159,8 @@ def log_admin_action(action, target_user_id=None, detail=''):
     if not u:
         return
     log = AdminAction(
-        admin_id=u.id,
-        action=action,
-        target_user_id=target_user_id,
-        target_detail=(detail or '')[:255],
-        ip_address=request.remote_addr or '',
+        admin_id=u.id, action=action, target_user_id=target_user_id,
+        target_detail=(detail or '')[:255], ip_address=request.remote_addr or '',
     )
     db.session.add(log)
     db.session.commit()
@@ -335,19 +351,11 @@ def serialize_post(p, me_id):
         user_id = p.author.id
 
     return {
-        'id': p.id,
-        'user_id': user_id,
-        'author': author,
-        'avatar': avatar,
-        'anonymous': p.anonymous,
-        'verified': not p.anonymous,
-        'time': time_ago(p.created_at),
-        'tag': p.tag,
-        'content': p.content,
+        'id': p.id, 'user_id': user_id, 'author': author, 'avatar': avatar,
+        'anonymous': p.anonymous, 'verified': not p.anonymous,
+        'time': time_ago(p.created_at), 'tag': p.tag, 'content': p.content,
         'image': url_for('uploaded_file', filename=p.image_path) if p.image_path else None,
-        'likes': len(p.likes),
-        'comments': len(p.comments),
-        'liked': liked,
+        'likes': len(p.likes), 'comments': len(p.comments), 'liked': liked,
     }
 
 
@@ -363,15 +371,13 @@ def api_feed():
         db.session.query(Post.user_id, db.func.count(Like.id))
         .join(Like, Like.post_id == Post.id)
         .filter(Like.user_id == me.id)
-        .group_by(Post.user_id)
-        .all()
+        .group_by(Post.user_id).all()
     )
 
     view_counts = dict(
         db.session.query(ProfileView.viewed_id, db.func.count(ProfileView.id))
         .filter(ProfileView.viewer_id == me.id)
-        .group_by(ProfileView.viewed_id)
-        .all()
+        .group_by(ProfileView.viewed_id).all()
     )
 
     tag_rows = db.session.query(Post.tag)\
@@ -387,28 +393,18 @@ def api_feed():
         q = q.filter_by(tag=f)
 
     posts = q.limit(300).all()
-
     now = datetime.utcnow()
 
     def score(p):
         s = 0
         age_hours = max(0, (now - p.created_at).total_seconds() / 3600)
         s += max(0, 100 - age_hours)
-
-        if p.user_id in followed_ids:
-            s += 300
-
+        if p.user_id in followed_ids: s += 300
         lc = like_counts.get(p.user_id, 0)
-        if lc >= 2:
-            s += 80 * min(lc, 5)
-
+        if lc >= 2: s += 80 * min(lc, 5)
         vc = view_counts.get(p.user_id, 0)
-        if vc >= 2:
-            s += 60 * min(vc, 5)
-
-        if p.tag in interest_tags:
-            s += 50
-
+        if vc >= 2: s += 60 * min(vc, 5)
+        if p.tag in interest_tags: s += 50
         return s
 
     posts.sort(key=score, reverse=True)
@@ -476,8 +472,7 @@ def api_comments(pid):
         'author': 'Anonymous' if c.anonymous else c.user.full_name,
         'anonymous': c.anonymous,
         'avatar': None if c.anonymous else user_avatar(c.user),
-        'content': c.content,
-        'time': time_ago(c.created_at),
+        'content': c.content, 'time': time_ago(c.created_at),
     } for c in p.comments])
 
 
@@ -492,20 +487,14 @@ def uploaded_file(filename):
 # ─────────────────────────────────────────────
 @app.route('/manifest.json')
 def pwa_manifest():
-    response = send_from_directory(
-        'static', 'manifest.json',
-        mimetype='application/manifest+json'
-    )
+    response = send_from_directory('static', 'manifest.json', mimetype='application/manifest+json')
     response.headers['Cache-Control'] = 'public, max-age=3600'
     return response
 
 
 @app.route('/sw.js')
 def pwa_service_worker():
-    response = send_from_directory(
-        'static', 'sw.js',
-        mimetype='application/javascript'
-    )
+    response = send_from_directory('static', 'sw.js', mimetype='application/javascript')
     response.headers['Service-Worker-Allowed'] = '/'
     response.headers['Cache-Control'] = 'no-cache'
     return response
@@ -516,11 +505,8 @@ def assetlinks():
     path = os.path.join(app.root_path, '.well-known', 'assetlinks.json')
     if not os.path.exists(path):
         return jsonify([]), 404
-    return send_from_directory(
-        os.path.join(app.root_path, '.well-known'),
-        'assetlinks.json',
-        mimetype='application/json'
-    )
+    return send_from_directory(os.path.join(app.root_path, '.well-known'),
+                               'assetlinks.json', mimetype='application/json')
 
 
 # ─────────────────────────────────────────────
@@ -532,10 +518,32 @@ def market():
     return render_template('market.html', user=current_user())
 
 
+def serialize_listing(l, me_id):
+    now = datetime.utcnow()
+    is_featured = bool(l.featured and l.featured_until and l.featured_until > now)
+    days_left = 0
+    if is_featured:
+        days_left = max(0, (l.featured_until - now).days)
+
+    return {
+        'id': l.id, 'title': l.title, 'description': l.description,
+        'price': l.price, 'category': l.category,
+        'image': url_for('uploaded_file', filename=l.image_path) if l.image_path else None,
+        'sold': l.sold,
+        'seller': l.seller.full_name, 'seller_id': l.seller.id,
+        'mine': l.user_id == me_id, 'time': time_ago(l.created_at),
+        'featured': is_featured,
+        'featured_until': l.featured_until.isoformat() if l.featured_until else None,
+        'days_remaining': days_left,
+        'featured_amount_paid': l.featured_amount_paid or 0,
+    }
+
+
 @app.route('/api/listings', methods=['GET', 'POST'])
 @verified_required
 def api_listings():
     me = current_user()
+
     if request.method == 'POST':
         title = request.form.get('title', '').strip()
         description = request.form.get('description', '').strip()
@@ -565,24 +573,17 @@ def api_listings():
     q = Listing.query.order_by(Listing.created_at.desc())
     if category != 'all':
         q = q.filter_by(category=category)
+
     listings = q.limit(100).all()
+
+    # Sort: featured-first (currently active), then newest
+    now = datetime.utcnow()
+    listings.sort(key=lambda l: (
+        0 if (l.featured and l.featured_until and l.featured_until > now) else 1,
+        -(l.created_at.timestamp() if l.created_at else 0)
+    ))
+
     return jsonify([serialize_listing(l, me.id) for l in listings])
-
-
-def serialize_listing(l, me_id):
-    return {
-        'id': l.id,
-        'title': l.title,
-        'description': l.description,
-        'price': l.price,
-        'category': l.category,
-        'image': url_for('uploaded_file', filename=l.image_path) if l.image_path else None,
-        'sold': l.sold,
-        'seller': l.seller.full_name,
-        'seller_id': l.seller.id,
-        'mine': l.user_id == me_id,
-        'time': time_ago(l.created_at),
-    }
 
 
 @app.route('/api/listings/<int:lid>/sold', methods=['POST'])
@@ -594,6 +595,7 @@ def api_listing_sold(lid):
     l.sold = not l.sold
     db.session.commit()
     return jsonify({'sold': l.sold})
+
 
 # ─────────────────────────────────────────────
 # PAYSTACK — Seller setup + verification
@@ -634,9 +636,7 @@ def api_paystack_verify_account():
 
     try:
         response = paystack.verification.resolve_account(
-            account_number=account_number,
-            bank_code=bank_code,
-        )
+            account_number=account_number, bank_code=bank_code)
         if response.get('status'):
             return jsonify({'account_name': response['data']['account_name']})
         return jsonify({'error': 'Could not verify'}), 400
@@ -664,7 +664,7 @@ def api_me_subaccount():
             business_name=u.full_name,
             settlement_bank=bank_code,
             account_number=account_number,
-            percentage_charge=5,  # FUNDAR takes 5%
+            percentage_charge=5,
         )
         if response.get('status'):
             u.subaccount_code = response['data']['subaccount_code']
@@ -675,13 +675,12 @@ def api_me_subaccount():
         return jsonify({'error': str(e)}), 400
 
 
-# ═════════════════════════════════════════════
-# PAYSTACK PAYMENT ROUTES (CORRECTED)
-# ═════════════════════════════════════════════
+# ─────────────────────────────────────────────
+# BUY LISTING (FIXED)
+# ─────────────────────────────────────────────
 @app.route('/api/market/buy/<int:listing_id>', methods=['POST'])
 @verified_required
 def buy_listing(listing_id):
-    """Initialize a Paystack transaction with a split to the seller."""
     if not paystack:
         return jsonify({'error': 'Payment system not configured'}), 500
 
@@ -690,77 +689,150 @@ def buy_listing(listing_id):
 
     if listing.sold:
         return jsonify({'error': 'This item is already sold'}), 400
-
     if listing.user_id == buyer.id:
         return jsonify({'error': 'You cannot buy your own listing'}), 400
 
-    # In a real app, ensure seller has a subaccount_code stored.
-    # For now, we'll simulate a basic transaction without split if they don't.
-    # To implement split payments, you need to create subaccounts via Paystack API.
     subaccount_code = getattr(listing.seller, 'subaccount_code', None)
 
     try:
-        transaction_data = {
+        kwargs = {
             'email': buyer.email,
-            'amount': int(listing.price * 100),  # Paystack uses kobo
+            'amount': int(listing.price * 100),
             'callback_url': url_for('market', _external=True),
             'metadata': {
+                'type': 'marketplace_sale',
                 'listing_id': listing.id,
                 'buyer_id': buyer.id,
-                'seller_id': listing.seller.id
-            }
+                'seller_id': listing.seller.id,
+            },
         }
-
-        # If seller has a subaccount, add split payment details
         if subaccount_code:
-            transaction_data['subaccount'] = subaccount_code
-            # Optional: transaction_charge can be a flat fee or percentage
-            # transaction_data['transaction_charge'] = int(listing.price * 0.05 * 100)  # 5% commission
+            kwargs['subaccount'] = subaccount_code
 
-        response = paystack.transaction.initialize(
-    email=buyer.email,
-    amount=int(listing.price * 100),
-    callback_url=url_for('market', _external=True),
-    metadata={
-        'listing_id': listing.id,
-        'buyer_id': buyer.id,
-        'seller_id': listing.seller.id,
-    },
-)
+        response = paystack.transaction.initialize(**kwargs)
 
         if response.get('status'):
-            auth_url = response['data']['authorization_url']
-            return jsonify({'authorization_url': auth_url})
-        else:
-            return jsonify({'error': response.get('message', 'Could not initialize payment')}), 400
-
+            return jsonify({'authorization_url': response['data']['authorization_url']})
+        return jsonify({'error': response.get('message', 'Payment failed')}), 400
     except Exception as e:
-        print(f"Paystack error: {e}")
+        print(f'Paystack error: {e}')
         return jsonify({'error': 'Payment initialization failed'}), 500
 
 
+# ─────────────────────────────────────────────
+# AD PROMOTION — Pricing + Purchase
+# ─────────────────────────────────────────────
+@app.route('/api/ads/pricing')
+@verified_required
+def api_ads_pricing():
+    return jsonify(AD_PRICING)
+
+
+@app.route('/api/market/promote/<int:listing_id>', methods=['POST'])
+@verified_required
+def api_promote_listing(listing_id):
+    """Generate bank transfer details to promote a listing."""
+    if not paystack:
+        return jsonify({'error': 'Payment system not configured'}), 500
+
+    u = current_user()
+    listing = Listing.query.get_or_404(listing_id)
+
+    if listing.user_id != u.id:
+        return jsonify({'error': 'You can only promote your own listings'}), 403
+    if listing.sold:
+        return jsonify({'error': 'Cannot promote a sold listing'}), 400
+
+    d = request.get_json() or {}
+    days = int(d.get('days', 0))
+
+    if days not in [t['days'] for t in AD_PRICING]:
+        return jsonify({'error': 'Invalid duration'}), 400
+
+    price = get_ad_price(days)
+
+    try:
+        response = paystack.transaction.initialize(
+            email=u.email,
+            amount=int(price * 100),
+            channels=['bank_transfer'],
+            callback_url=url_for('market', _external=True),
+            metadata={
+                'type': 'ad_promotion',
+                'listing_id': listing.id,
+                'user_id': u.id,
+                'days': days,
+                'price': price,
+            }
+        )
+        if response.get('status'):
+            data = response['data']
+            return jsonify({
+                'account_number': data.get('account_number'),
+                'account_name': data.get('account_name'),
+                'bank_name': data.get('bank_name'),
+                'amount': price,
+                'reference': data.get('reference'),
+                'days': days,
+            })
+        return jsonify({'error': response.get('message', 'Could not initialize')}), 400
+    except Exception as e:
+        print(f'Promote error: {e}')
+        return jsonify({'error': 'Promotion setup failed'}), 500
+
+
+# ─────────────────────────────────────────────
+# PAYSTACK WEBHOOK — handles sales + ads
+# ─────────────────────────────────────────────
 @app.route('/paystack/webhook', methods=['POST'])
 def paystack_webhook():
-    """Verify and handle Paystack webhook events."""
-    # It is CRITICAL to verify the event is from Paystack.
-    # Use the signature verification method provided by the library.
-    # For simplicity here, we just process the event.
     event = request.json
     if not event:
         return '', 400
 
-    if event.get('event') == 'charge.success':
-        data = event['data']
-        reference = data['reference']
-        metadata = data.get('metadata', {})
-        listing_id = metadata.get('listing_id')
+    if event.get('event') != 'charge.success':
+        return '', 200
 
-        if listing_id:
-            listing = Listing.query.get(listing_id)
-            if listing and not listing.sold:
-                listing.sold = True
-                db.session.commit()
-                print(f"✓ Payment successful for listing {listing_id}. Reference: {reference}")
+    data = event['data']
+    reference = data['reference']
+    metadata = data.get('metadata', {})
+    payment_type = metadata.get('type')
+
+    # ── Ad promotion ──
+    if payment_type == 'ad_promotion':
+        listing_id = metadata.get('listing_id')
+        days = int(metadata.get('days', 0))
+        price = float(metadata.get('price', 0))
+
+        listing = Listing.query.get(listing_id)
+        if listing and days > 0:
+            # Extend from current expiry if still active, otherwise start now
+            if listing.featured_until and listing.featured_until > datetime.utcnow():
+                base = listing.featured_until
+            else:
+                base = datetime.utcnow()
+
+            listing.featured_until = base + timedelta(days=days)
+            listing.featured = True
+            listing.featured_days = (listing.featured_days or 0) + days
+            listing.featured_amount_paid = (listing.featured_amount_paid or 0) + price
+            listing.featured_last_payment_ref = reference
+            db.session.commit()
+            print(f'✓ Ad activated: listing {listing_id} for {days} days (ref: {reference})')
+        return '', 200
+
+    # ── Marketplace sale ──
+    listing_id = metadata.get('listing_id')
+    buyer_id = metadata.get('buyer_id')
+    if listing_id:
+        listing = Listing.query.get(listing_id)
+        if listing and not listing.sold:
+            listing.sold = True
+            listing.sold_at = datetime.utcnow()
+            listing.buyer_id = buyer_id
+            listing.payment_reference = reference
+            db.session.commit()
+            print(f'✓ Sale completed: listing {listing_id} (ref: {reference})')
 
     return '', 200
 
@@ -788,20 +860,20 @@ def api_assignments():
 
     if request.method == 'POST':
         if request.content_type and 'multipart/form-data' in request.content_type:
-            title        = request.form.get('title', '').strip()
-            due_str      = request.form.get('due_date', '').strip()
-            course_code  = request.form.get('course_code', '').strip()
+            title = request.form.get('title', '').strip()
+            due_str = request.form.get('due_date', '').strip()
+            course_code = request.form.get('course_code', '').strip()
             course_title = request.form.get('course_title', '').strip()
-            description  = request.form.get('description', '').strip()
-            file         = request.files.get('attachment')
+            description = request.form.get('description', '').strip()
+            file = request.files.get('attachment')
         else:
             d = request.get_json() or {}
-            title        = (d.get('title') or '').strip()
-            due_str      = d.get('due_date')
-            course_code  = (d.get('course_code') or '').strip()
+            title = (d.get('title') or '').strip()
+            due_str = d.get('due_date')
+            course_code = (d.get('course_code') or '').strip()
             course_title = (d.get('course_title') or '').strip()
-            description  = (d.get('description') or '').strip()
-            file         = None
+            description = (d.get('description') or '').strip()
+            file = None
 
         if not title or not due_str or not course_code:
             return jsonify({'error': 'Title, course code and due date required'}), 400
@@ -819,16 +891,9 @@ def api_assignments():
             attachment_name = file.filename
             attachment_path = save_upload(file, f'assign{me.id}')
 
-        a = Assignment(
-            user_id=me.id,
-            course_code=course_code,
-            course_title=course_title,
-            title=title,
-            description=description,
-            due_date=due_date,
-            attachment_path=attachment_path,
-            attachment_name=attachment_name,
-        )
+        a = Assignment(user_id=me.id, course_code=course_code, course_title=course_title,
+                       title=title, description=description, due_date=due_date,
+                       attachment_path=attachment_path, attachment_name=attachment_name)
         db.session.add(a)
         db.session.commit()
         return jsonify(serialize_assignment(a))
@@ -841,27 +906,18 @@ def serialize_assignment(a):
     now = datetime.utcnow()
     overdue = a.due_date < now and not a.completed
     days_left = (a.due_date - now).days
-    if a.completed:
-        urgency = 'done'
-    elif overdue:
-        urgency = 'overdue'
-    elif days_left <= 1:
-        urgency = 'urgent'
-    elif days_left <= 3:
-        urgency = 'soon'
-    else:
-        urgency = 'later'
+    if a.completed: urgency = 'done'
+    elif overdue: urgency = 'overdue'
+    elif days_left <= 1: urgency = 'urgent'
+    elif days_left <= 3: urgency = 'soon'
+    else: urgency = 'later'
 
     return {
-        'id': a.id,
-        'course_code': a.course_code,
-        'course_title': a.course_title,
-        'title': a.title,
-        'description': a.description,
+        'id': a.id, 'course_code': a.course_code, 'course_title': a.course_title,
+        'title': a.title, 'description': a.description,
         'due_date': a.due_date.isoformat(),
         'due_label': a.due_date.strftime('%b %d, %I:%M %p'),
-        'completed': a.completed,
-        'urgency': urgency,
+        'completed': a.completed, 'urgency': urgency,
         'attachment_url': url_for('uploaded_file', filename=a.attachment_path) if a.attachment_path else None,
         'attachment_name': a.attachment_name,
         'has_image': bool(a.attachment_path and a.attachment_path.lower().rsplit('.', 1)[-1] in {'png', 'jpg', 'jpeg', 'webp'}),
@@ -872,8 +928,7 @@ def serialize_assignment(a):
 @verified_required
 def api_assignment_toggle(aid):
     a = Assignment.query.get_or_404(aid)
-    if a.user_id != current_user().id:
-        abort(403)
+    if a.user_id != current_user().id: abort(403)
     a.completed = not a.completed
     db.session.commit()
     return jsonify(serialize_assignment(a))
@@ -883,8 +938,7 @@ def api_assignment_toggle(aid):
 @verified_required
 def api_assignment_delete(aid):
     a = Assignment.query.get_or_404(aid)
-    if a.user_id != current_user().id:
-        abort(403)
+    if a.user_id != current_user().id: abort(403)
     if a.attachment_path:
         fp = os.path.join(app.config['UPLOAD_FOLDER'], a.attachment_path)
         if os.path.exists(fp):
@@ -940,14 +994,12 @@ def api_events():
 def serialize_event(e, me_id):
     going = any(r.user_id == me_id for r in e.rsvps)
     return {
-        'id': e.id, 'title': e.title, 'description': e.description,
-        'venue': e.venue,
+        'id': e.id, 'title': e.title, 'description': e.description, 'venue': e.venue,
         'starts_at': e.starts_at.isoformat(),
         'starts_label': e.starts_at.strftime('%a, %b %d · %I:%M %p'),
         'image': url_for('uploaded_file', filename=e.image_path) if e.image_path else None,
         'host': e.host.full_name, 'host_id': e.host.id,
-        'rsvp_count': len(e.rsvps), 'going': going,
-        'mine': e.user_id == me_id,
+        'rsvp_count': len(e.rsvps), 'going': going, 'mine': e.user_id == me_id,
     }
 
 
@@ -980,11 +1032,8 @@ def dm_key_for(a, b):
 
 def serialize_room_for(r, me):
     last_msg = r.messages[-1] if r.messages else None
-
     if r.is_group:
-        display_name = r.name
-        avatar = None
-        other_user_id = None
+        display_name, avatar, other_user_id = r.name, None, None
     else:
         other = next((m.user for m in r.members if m.user_id != me.id), None)
         display_name = other.full_name if other else 'Unknown'
@@ -992,11 +1041,8 @@ def serialize_room_for(r, me):
         other_user_id = other.id if other else None
 
     return {
-        'id': r.id,
-        'name': display_name,
-        'avatar': avatar,
-        'is_group': r.is_group,
-        'other_user_id': other_user_id,
+        'id': r.id, 'name': display_name, 'avatar': avatar,
+        'is_group': r.is_group, 'other_user_id': other_user_id,
         'last_message': last_msg.content if last_msg else '',
         'last_time': time_ago(last_msg.created_at) if last_msg else '',
         'member_count': len(r.members),
@@ -1007,10 +1053,7 @@ def serialize_room_for(r, me):
 @verified_required
 def api_chat_rooms_list():
     me = current_user()
-    rooms = (ChatRoom.query
-             .join(ChatMember)
-             .filter(ChatMember.user_id == me.id)
-             .all())
+    rooms = ChatRoom.query.join(ChatMember).filter(ChatMember.user_id == me.id).all()
     rooms_data = [serialize_room_for(r, me) for r in rooms]
     rooms_data.sort(key=lambda r: r['last_time'], reverse=True)
     return jsonify(rooms_data)
@@ -1024,10 +1067,8 @@ def api_chat_group_create():
     name = (d.get('name') or '').strip()
     member_ids = d.get('member_ids') or []
 
-    if not name:
-        return jsonify({'error': 'Name required'}), 400
-    if len(member_ids) < 2:
-        return jsonify({'error': 'Group needs at least 2 other members'}), 400
+    if not name: return jsonify({'error': 'Name required'}), 400
+    if len(member_ids) < 2: return jsonify({'error': 'Group needs at least 2 other members'}), 400
 
     room = ChatRoom(name=name, is_group=True)
     db.session.add(room)
@@ -1053,32 +1094,22 @@ def api_chat_dm_open(user_id):
         return jsonify({'error': 'User not verified'}), 403
 
     key = dm_key_for(me, user_id)
-
     existing = ChatRoom.query.filter_by(dm_key=key).first()
     if existing:
-        return jsonify({
-            'id': existing.id,
-            'name': target.full_name,
-            'avatar': user_avatar(target),
-            'is_group': False,
-            'other_user_id': target.id,
-        })
+        return jsonify({'id': existing.id, 'name': target.full_name,
+                        'avatar': user_avatar(target), 'is_group': False,
+                        'other_user_id': target.id})
 
     room = ChatRoom(name=target.full_name, is_group=False, dm_key=key)
     db.session.add(room)
     db.session.flush()
-
     db.session.add(ChatMember(room_id=room.id, user_id=me))
     db.session.add(ChatMember(room_id=room.id, user_id=user_id))
     db.session.commit()
 
-    return jsonify({
-        'id': room.id,
-        'name': target.full_name,
-        'avatar': user_avatar(target),
-        'is_group': False,
-        'other_user_id': target.id,
-    })
+    return jsonify({'id': room.id, 'name': target.full_name,
+                    'avatar': user_avatar(target), 'is_group': False,
+                    'other_user_id': target.id})
 
 
 @app.route('/api/chat/rooms/<int:rid>/messages')
@@ -1086,15 +1117,12 @@ def api_chat_dm_open(user_id):
 def api_chat_messages(rid):
     me = current_user().id
     membership = ChatMember.query.filter_by(room_id=rid, user_id=me).first()
-    if not membership:
-        abort(403)
+    if not membership: abort(403)
     room = ChatRoom.query.get_or_404(rid)
     return jsonify([{
         'id': m.id, 'content': m.content, 'user_id': m.user_id,
-        'author': m.user.full_name,
-        'avatar': user_avatar(m.user),
-        'mine': m.user_id == me,
-        'time': m.created_at.strftime('%I:%M %p'),
+        'author': m.user.full_name, 'avatar': user_avatar(m.user),
+        'mine': m.user_id == me, 'time': m.created_at.strftime('%I:%M %p'),
     } for m in room.messages])
 
 
@@ -1106,13 +1134,10 @@ def api_chat_messages(rid):
 def api_users_search():
     me = current_user().id
     q = (request.args.get('q') or '').strip().lower()
-
-    if not q:
-        return jsonify([])
+    if not q: return jsonify([])
 
     candidates = User.query.filter(
-        User.id != me,
-        User.role != 'admin',
+        User.id != me, User.role != 'admin',
         User.verification_status == 'verified',
     ).limit(500).all()
 
@@ -1133,9 +1158,7 @@ def api_users_search():
         key = dm_key_for(me, u.id)
         existing = ChatRoom.query.filter_by(dm_key=key).first()
         result.append({
-            'id': u.id,
-            'name': u.full_name,
-            'email': u.email,
+            'id': u.id, 'name': u.full_name, 'email': u.email,
             'avatar': user_avatar(u),
             'existing_room_id': existing.id if existing else None,
         })
@@ -1149,8 +1172,7 @@ def api_users():
     users = User.query.filter(User.id != me, User.verification_status == 'verified')\
         .limit(200).all()
     return jsonify([{
-        'id': u.id, 'name': u.full_name, 'email': u.email,
-        'avatar': user_avatar(u),
+        'id': u.id, 'name': u.full_name, 'email': u.email, 'avatar': user_avatar(u),
     } for u in users])
 
 
@@ -1232,7 +1254,7 @@ def api_me_picture_delete():
 
 
 # ─────────────────────────────────────────────
-# CONNECT (Add Up)
+# CONNECT
 # ─────────────────────────────────────────────
 @app.route('/connect')
 @verified_required
@@ -1242,15 +1264,12 @@ def connect():
 
 def serialize_connection_user(u, connection_status=None, connection_id=None):
     return {
-        'id': u.id,
-        'name': u.full_name,
-        'avatar': user_avatar(u),
+        'id': u.id, 'name': u.full_name, 'avatar': user_avatar(u),
         'bio': u.bio or '',
         'department': u.verification.department if u.verification else '',
         'faculty': u.verification.faculty if u.verification else '',
         'level': u.verification.level if u.verification else '',
-        'status': connection_status,
-        'connection_id': connection_id,
+        'status': connection_status, 'connection_id': connection_id,
     }
 
 
@@ -1258,7 +1277,6 @@ def serialize_connection_user(u, connection_status=None, connection_id=None):
 @verified_required
 def api_connect_suggestions():
     me = current_user()
-
     existing = Connection.query.filter(
         db.or_(Connection.requester_id == me.id, Connection.recipient_id == me.id)
     ).all()
@@ -1277,10 +1295,8 @@ def api_connect_suggestions():
     ).limit(100).all()
 
     def score(u):
-        if my_dept and u.verification and u.verification.department == my_dept:
-            return 0
-        if my_faculty and u.verification and u.verification.faculty == my_faculty:
-            return 1
+        if my_dept and u.verification and u.verification.department == my_dept: return 0
+        if my_faculty and u.verification and u.verification.faculty == my_faculty: return 1
         return 2
 
     candidates.sort(key=score)
@@ -1291,19 +1307,11 @@ def api_connect_suggestions():
 @verified_required
 def api_connect_requests():
     me = current_user().id
-
     incoming = Connection.query.filter_by(recipient_id=me, status='pending').all()
     outgoing = Connection.query.filter_by(requester_id=me, status='pending').all()
-
     return jsonify({
-        'incoming': [
-            serialize_connection_user(c.requester, 'incoming', c.id)
-            for c in incoming
-        ],
-        'outgoing': [
-            serialize_connection_user(c.recipient, 'outgoing', c.id)
-            for c in outgoing
-        ],
+        'incoming': [serialize_connection_user(c.requester, 'incoming', c.id) for c in incoming],
+        'outgoing': [serialize_connection_user(c.recipient, 'outgoing', c.id) for c in outgoing],
     })
 
 
@@ -1314,11 +1322,8 @@ def api_connect_send(user_id):
     if user_id == me:
         return jsonify({'error': 'Cannot connect to yourself'}), 400
 
-    target = User.query.get_or_404(user_id)
-
     reverse = Connection.query.filter_by(
-        requester_id=user_id, recipient_id=me, status='pending'
-    ).first()
+        requester_id=user_id, recipient_id=me, status='pending').first()
     if reverse:
         reverse.status = 'accepted'
         db.session.commit()
@@ -1345,8 +1350,7 @@ def api_connect_send(user_id):
 def api_connect_accept(cid):
     me = current_user().id
     c = Connection.query.get_or_404(cid)
-    if c.recipient_id != me:
-        abort(403)
+    if c.recipient_id != me: abort(403)
     c.status = 'accepted'
     db.session.commit()
     return jsonify({'ok': True})
@@ -1357,8 +1361,7 @@ def api_connect_accept(cid):
 def api_connect_decline(cid):
     me = current_user().id
     c = Connection.query.get_or_404(cid)
-    if c.recipient_id != me:
-        abort(403)
+    if c.recipient_id != me: abort(403)
     db.session.delete(c)
     db.session.commit()
     return jsonify({'ok': True})
@@ -1372,7 +1375,6 @@ def api_connect_mine():
         Connection.status == 'accepted',
         db.or_(Connection.requester_id == me, Connection.recipient_id == me)
     ).all()
-
     result = []
     for c in accepted:
         other = c.recipient if c.requester_id == me else c.requester
@@ -1389,7 +1391,6 @@ def api_follow(uid):
     me = current_user().id
     if uid == me:
         return jsonify({'error': 'Cannot follow yourself'}), 400
-    target = User.query.get_or_404(uid)
     existing = Follow.query.filter_by(follower_id=me, following_id=uid).first()
     if not existing:
         db.session.add(Follow(follower_id=me, following_id=uid))
@@ -1434,10 +1435,8 @@ def api_follow_status(uid):
 def user_profile(uid):
     me = current_user()
     target = User.query.get_or_404(uid)
-
     if target.id == me.id:
         return redirect(url_for('me'))
-
     if target.verification_status != 'verified' and target.role != 'admin':
         abort(404)
 
@@ -1452,17 +1451,13 @@ def user_profile(uid):
 
     public_info = {
         'department': v.department if v else '',
-        'faculty':    v.faculty    if v else '',
-        'level':      v.level      if v else '',
+        'faculty': v.faculty if v else '',
+        'level': v.level if v else '',
     }
 
-    return render_template('user.html',
-                           user=target,
-                           public_info=public_info,
-                           post_count=post_count,
-                           follower_count=follower_count,
-                           following_count=following_count,
-                           is_following=is_following,
+    return render_template('user.html', user=target, public_info=public_info,
+                           post_count=post_count, follower_count=follower_count,
+                           following_count=following_count, is_following=is_following,
                            avatar=user_avatar(target))
 
 
@@ -1475,16 +1470,12 @@ def api_user_posts(uid):
     return jsonify([serialize_post(p, me) for p in posts])
 
 
-# ─────────────────────────────────────────────
-# FOLLOWERS / FOLLOWING
-# ─────────────────────────────────────────────
 @app.route('/api/me/following')
 @verified_required
 def api_me_following():
     me = current_user().id
     rows = Connection.query.filter_by(requester_id=me, status='accepted').all()
-    result = [serialize_connection_user(c.recipient, 'following', c.id) for c in rows]
-    return jsonify(result)
+    return jsonify([serialize_connection_user(c.recipient, 'following', c.id) for c in rows])
 
 
 @app.route('/api/me/followers')
@@ -1492,18 +1483,15 @@ def api_me_following():
 def api_me_followers():
     me = current_user().id
     rows = Connection.query.filter_by(recipient_id=me, status='accepted').all()
-    result = [serialize_connection_user(c.requester, 'follower', c.id) for c in rows]
-    return jsonify(result)
+    return jsonify([serialize_connection_user(c.requester, 'follower', c.id) for c in rows])
 
 
 # ─────────────────────────────────────────────
-# ADMIN — SINGLE LOGIN, PERMANENT, LAUNCH-READY
+# ADMIN
 # ─────────────────────────────────────────────
 @app.route('/admin-login', methods=['GET', 'POST'])
 def admin_login():
-    """Three-factor login: email + password + admin key. No auto-unlock."""
     u = current_user()
-
     if u and u.role == 'admin' and session.get('admin_unlocked') and not admin_session_expired():
         touch_admin_session()
         return redirect(url_for('admin'))
@@ -1533,18 +1521,15 @@ def admin_login():
 
 
 def admin_view():
-    """The admin dashboard."""
     u = current_user()
     if not u or u.role != 'admin':
         return redirect(url_for('admin_login'))
-
     if not session.get('admin_unlocked') or admin_session_expired():
         session.pop('admin_unlocked', None)
         session.pop('admin_last_seen', None)
         return redirect(url_for('admin_login'))
 
     touch_admin_session()
-
     pending = StudentVerification.query.filter_by(status='pending')\
         .order_by(StudentVerification.submitted_at.asc()).all()
     recent = StudentVerification.query.filter(StudentVerification.status != 'pending')\
@@ -1566,10 +1551,8 @@ def admin_lock():
 @app.route(app.config['ADMIN_PATH'] + '/approve/<int:vid>', methods=['POST'])
 def admin_approve(vid):
     u = current_user()
-    if not u or u.role != 'admin':
-        abort(404)
-    if not is_admin_unlocked():
-        return redirect(url_for('admin_login'))
+    if not u or u.role != 'admin': abort(404)
+    if not is_admin_unlocked(): return redirect(url_for('admin_login'))
     touch_admin_session()
 
     v = StudentVerification.query.get_or_404(vid)
@@ -1587,10 +1570,8 @@ def admin_approve(vid):
 @app.route(app.config['ADMIN_PATH'] + '/reject/<int:vid>', methods=['POST'])
 def admin_reject(vid):
     u = current_user()
-    if not u or u.role != 'admin':
-        abort(404)
-    if not is_admin_unlocked():
-        return redirect(url_for('admin_login'))
+    if not u or u.role != 'admin': abort(404)
+    if not is_admin_unlocked(): return redirect(url_for('admin_login'))
     touch_admin_session()
 
     reason = request.form.get('reason', '').strip() or 'Document could not be verified'
@@ -1610,18 +1591,15 @@ def admin_reject(vid):
 @app.route(app.config['ADMIN_PATH'] + '/log')
 def admin_log_view():
     u = current_user()
-    if not u or u.role != 'admin':
-        abort(404)
-    if not is_admin_unlocked():
-        return redirect(url_for('admin_login'))
+    if not u or u.role != 'admin': abort(404)
+    if not is_admin_unlocked(): return redirect(url_for('admin_login'))
     touch_admin_session()
-
     logs = AdminAction.query.order_by(AdminAction.created_at.desc()).limit(200).all()
     return render_template('admin_log.html', logs=logs)
 
 
 # ─────────────────────────────────────────────
-# WEBSOCKET — Chat
+# WEBSOCKET
 # ─────────────────────────────────────────────
 @socketio.on('join')
 def ws_join(data):
@@ -1629,16 +1607,14 @@ def ws_join(data):
     if not rid: return
     u = current_user()
     if not u: return
-    if not ChatMember.query.filter_by(room_id=rid, user_id=u.id).first():
-        return
+    if not ChatMember.query.filter_by(room_id=rid, user_id=u.id).first(): return
     join_room(f'room_{rid}')
 
 
 @socketio.on('leave')
 def ws_leave(data):
     rid = data.get('room_id')
-    if rid:
-        leave_room(f'room_{rid}')
+    if rid: leave_room(f'room_{rid}')
 
 
 @socketio.on('message')
@@ -1646,10 +1622,8 @@ def ws_message(data):
     rid = data.get('room_id')
     content = (data.get('content') or '').strip()
     u = current_user()
-    if not rid or not content or not u:
-        return
-    if not ChatMember.query.filter_by(room_id=rid, user_id=u.id).first():
-        return
+    if not rid or not content or not u: return
+    if not ChatMember.query.filter_by(room_id=rid, user_id=u.id).first(): return
 
     msg = ChatMessage(room_id=rid, user_id=u.id, content=content[:2000])
     db.session.add(msg)
@@ -1657,8 +1631,7 @@ def ws_message(data):
 
     payload = {
         'id': msg.id, 'content': msg.content, 'user_id': u.id,
-        'author': u.full_name,
-        'avatar': user_avatar(u),
+        'author': u.full_name, 'avatar': user_avatar(u),
         'time': msg.created_at.strftime('%I:%M %p'),
     }
     emit('message', payload, to=f'room_{rid}')
@@ -1672,24 +1645,20 @@ def ws_message(data):
 def api_debug_users():
     users = User.query.all()
     return jsonify([{
-        'id': u.id,
-        'name': u.full_name,
-        'email': u.email,
-        'role': u.role,
-        'status': u.verification_status,
+        'id': u.id, 'name': u.full_name, 'email': u.email,
+        'role': u.role, 'status': u.verification_status,
         'has_picture': bool(u.profile_picture_path),
     } for u in users])
 
 
 # ─────────────────────────────────────────────
-# INIT
+# INIT — no drop_all, DB persists
 # ─────────────────────────────────────────────
 with app.app_context():
-    db.drop_all()      
     db.create_all()
 
     admin_email = os.environ.get('ADMIN_EMAIL', 'oladipobright12@gmail.com')
-    admin_pass  = os.environ.get('ADMIN_PASSWORD', 'bright_kelvin*$')
+    admin_pass = os.environ.get('ADMIN_PASSWORD', 'bright_kelvin*$')
 
     existing = User.query.filter_by(email=admin_email).first()
     if existing:
@@ -1707,13 +1676,9 @@ with app.app_context():
             print(f'✓ Admin credentials updated: {admin_email}')
         else:
             db.session.add(User(
-                full_name='FUNDAR Admin',
-                email=admin_email,
-                phone='',
+                full_name='FUNDAR Admin', email=admin_email, phone='',
                 password_hash=generate_password_hash(admin_pass),
-                role='admin',
-                verification_status='verified',
-                avatar_seed='admin'
+                role='admin', verification_status='verified', avatar_seed='admin'
             ))
             db.session.commit()
             print(f'✓ Admin created: {admin_email}')
