@@ -1,5 +1,6 @@
 import os
 import json
+import requests
 from datetime import datetime, timedelta
 from functools import wraps
 from flask import (Flask, render_template, request, redirect, url_for,
@@ -12,7 +13,7 @@ from config import Config
 from models import (db, User, StudentVerification, Post, Like, Comment,
                     ChatRoom, ChatMember, ChatMessage,
                     Listing, Assignment, Event, EventRSVP, Connection,
-                    Follow, ProfileView, AdminAction)
+                    Follow, ProfileView, AdminAction, AdPayment)
 from ai_check import analyze_image
 
 try:
@@ -21,31 +22,31 @@ try:
 except ImportError:
     pass
 
-# ─────────────────────────────────────────────
-# PAYSTACK
-# ─────────────────────────────────────────────
-try:
-    from paystackapi.paystack import Paystack
-    PAYSTACK_SECRET_KEY = os.environ.get('PAYSTACK_SECRET_KEY', '')
-    paystack = Paystack(secret_key=PAYSTACK_SECRET_KEY) if PAYSTACK_SECRET_KEY else None
-except ImportError:
-    paystack = None
-
 app = Flask(__name__)
 app.config.from_object(Config)
 os.makedirs(app.config['UPLOAD_FOLDER'], exist_ok=True)
 db.init_app(app)
 
-if paystack:
-    print('✓ Paystack initialized')
+# ─────────────────────────────────────────────
+# PAYMENT CONFIG
+# ─────────────────────────────────────────────
+AD_PAYMENT_BANK    = os.environ.get('AD_PAYMENT_BANK', 'OPay')
+AD_PAYMENT_ACCOUNT = os.environ.get('AD_PAYMENT_ACCOUNT', '9047552401')
+AD_PAYMENT_NAME    = os.environ.get('AD_PAYMENT_NAME', 'Oladipo Precious Adeola')
+
+FLW_SECRET_KEY   = os.environ.get('FLW_SECRET_KEY', '')
+FLW_WEBHOOK_HASH = os.environ.get('FLW_WEBHOOK_HASH', '')
+
+if FLW_SECRET_KEY:
+    print('✓ Flutterwave configured')
 else:
-    print('⚠ PAYSTACK_SECRET_KEY not set — marketplace payments disabled')
+    print('⚠ FLW_SECRET_KEY not set — marketplace checkout disabled')
 
 socketio = SocketIO(app, cors_allowed_origins='*', async_mode='threading')
 
 
 # ─────────────────────────────────────────────
-# AD PRICING (tiered, affordable for students)
+# AD PRICING
 # ─────────────────────────────────────────────
 AD_PRICING = [
     {'days': 1,  'price': 200,  'per_day': 200, 'label': 'Quick boost'},
@@ -61,6 +62,12 @@ def get_ad_price(days):
         if tier['days'] == days:
             return tier['price']
     return days * 200
+
+
+def generate_ref(prefix):
+    u = current_user()
+    uid = u.id if u else 0
+    return f'FUNDAR-{prefix}-{uid}-{int(datetime.utcnow().timestamp())}'
 
 
 # ─────────────────────────────────────────────
@@ -525,12 +532,15 @@ def serialize_listing(l, me_id):
     if is_featured:
         days_left = max(0, (l.featured_until - now).days)
 
+    seller = l.seller
     return {
         'id': l.id, 'title': l.title, 'description': l.description,
         'price': l.price, 'category': l.category,
         'image': url_for('uploaded_file', filename=l.image_path) if l.image_path else None,
         'sold': l.sold,
-        'seller': l.seller.full_name, 'seller_id': l.seller.id,
+        'seller': seller.full_name, 'seller_id': seller.id,
+        'seller_verified': seller.verification_status == 'verified',
+        'seller_whatsapp': getattr(seller, 'whatsapp_number', '') or '',
         'mine': l.user_id == me_id, 'time': time_ago(l.created_at),
         'featured': is_featured,
         'featured_until': l.featured_until.isoformat() if l.featured_until else None,
@@ -575,15 +585,19 @@ def api_listings():
         q = q.filter_by(category=category)
 
     listings = q.limit(100).all()
-
-    # Sort: featured-first (currently active), then newest
     now = datetime.utcnow()
     listings.sort(key=lambda l: (
         0 if (l.featured and l.featured_until and l.featured_until > now) else 1,
         -(l.created_at.timestamp() if l.created_at else 0)
     ))
-
     return jsonify([serialize_listing(l, me.id) for l in listings])
+
+
+@app.route('/api/listings/<int:lid>')
+@verified_required
+def api_listing_single(lid):
+    l = Listing.query.get_or_404(lid)
+    return jsonify(serialize_listing(l, current_user().id))
 
 
 @app.route('/api/listings/<int:lid>/sold', methods=['POST'])
@@ -598,251 +612,100 @@ def api_listing_sold(lid):
 
 
 # ─────────────────────────────────────────────
-# PAYSTACK — Seller setup + verification
-# ─────────────────────────────────────────────
-@app.route('/api/me/subaccount-status')
-@verified_required
-def api_subaccount_status():
-    u = current_user()
-    has = bool(getattr(u, 'subaccount_code', None))
-    return jsonify({'has_subaccount': has})
-
-
-# In app.py
-
-# Simple in-memory cache for the full bank list
-BANK_CACHE = {'banks': None, 'fetched_at': None}
-CACHE_TTL_HOURS = 6
-
-# ─────────────────────────────────────────────
-# PAYSTACK — Banks + Verify Account
-# ─────────────────────────────────────────────
-import requests
-
-@app.route('/api/paystack/banks')
-@verified_required
-def api_paystack_banks():
-    """Return the full list of Nigerian banks from Paystack."""
-    if not paystack or not PAYSTACK_SECRET_KEY:
-        return jsonify([])
-
-    # Serve from cache if fresh
-    now = datetime.utcnow()
-    if BANK_CACHE['banks'] and BANK_CACHE['fetched_at']:
-        age_hours = (now - BANK_CACHE['fetched_at']).total_seconds() / 3600
-        if age_hours < CACHE_TTL_HOURS:
-            return jsonify(BANK_CACHE['banks'])
-
-    try:
-        # Direct REST call — more reliable than library wrappers
-        r = requests.get(
-            'https://api.paystack.co/bank',
-            headers={'Authorization': f'Bearer {PAYSTACK_SECRET_KEY}'},
-            params={
-                'country': 'nigeria',
-                'currency': 'NGN',
-                'use_cursor': 'true',
-                'perPage': 100,
-            },
-            timeout=10,
-        )
-        r.raise_for_status()
-        payload = r.json()
-
-        if not payload.get('status'):
-            print(f"[BANKS] Paystack rejected request: {payload.get('message')}")
-            return jsonify([])
-
-        banks = [
-            {'name': b['name'], 'code': b['code']}
-            for b in payload.get('data', [])
-            if b.get('active') and b.get('currency') == 'NGN'
-        ]
-
-        BANK_CACHE['banks'] = banks
-        BANK_CACHE['fetched_at'] = now
-        return jsonify(banks)
-
-    except requests.exceptions.HTTPError as e:
-        print(f"[BANKS] HTTP error {e.response.status_code}: {e.response.text[:200]}")
-        return jsonify([])
-    except Exception as e:
-        print(f"[BANKS] Unexpected error: {e}")
-        return jsonify([])
-
-
-@app.route('/api/paystack/verify-account')
-@verified_required
-def api_paystack_verify_account():
-    """Resolve an account name from a bank account number."""
-    if not paystack or not PAYSTACK_SECRET_KEY:
-        return jsonify({'error': 'Paystack not configured'}), 500
-
-    account_number = request.args.get('account_number', '').strip()
-    bank_code = request.args.get('bank_code', '').strip()
-
-    if len(account_number) != 10 or not bank_code:
-        return jsonify({'error': 'Invalid account number or bank'}), 400
-
-    try:
-        r = requests.get(
-            'https://api.paystack.co/bank/resolve',
-            headers={'Authorization': f'Bearer {PAYSTACK_SECRET_KEY}'},
-            params={'account_number': account_number, 'bank_code': bank_code},
-            timeout=10,
-        )
-
-        payload = r.json()
-
-        if payload.get('status'):
-            data = payload['data']
-            return jsonify({
-                'account_name': data['account_name'],
-                'account_number': data['account_number'],
-            })
-
-        # This is the most common failure — account not found OR account not verified
-        print(f"[VERIFY] Paystack rejected: {payload.get('message')}")
-        return jsonify({
-            'error': payload.get('message', 'Could not verify account'),
-        }), 400
-
-    except Exception as e:
-        print(f"[VERIFY] Error: {e}")
-        return jsonify({'error': 'Verification failed'}), 500
-
-@app.route('/api/paystack/diagnose')
-@verified_required
-def api_paystack_diagnose():
-    """Diagnostic — shows exactly what Paystack says about your account."""
-    if not PAYSTACK_SECRET_KEY:
-        return jsonify({
-            'step': 'no_key',
-            'message': 'PAYSTACK_SECRET_KEY env var is not set on Railway',
-        })
-
-    # Show what kind of key you're using (test vs live) without revealing it
-    key_type = 'test' if PAYSTACK_SECRET_KEY.startswith('sk_test_') else \
-               'live' if PAYSTACK_SECRET_KEY.startswith('sk_live_') else \
-               'unknown'
-
-    try:
-        # Test 1: Can we reach Paystack at all?
-        health = requests.get(
-            'https://api.paystack.co/bank?country=nigeria&currency=NGN&perPage=10',
-            headers={'Authorization': f'Bearer {PAYSTACK_SECRET_KEY}'},
-            timeout=10,
-        )
-
-        result = {
-            'key_type': key_type,
-            'http_status': health.status_code,
-        }
-
-        payload = health.json()
-        result['paystack_status'] = payload.get('status')
-        result['paystack_message'] = payload.get('message')
-
-        if payload.get('status') and payload.get('data'):
-            result['bank_count'] = len(payload['data'])
-            result['first_3_banks'] = [b['name'] for b in payload['data'][:3]]
-            result['verdict'] = '✅ Account is verified — banks load correctly'
-        elif payload.get('status') and not payload.get('data'):
-            result['verdict'] = '⚠ API works but returned 0 banks — account not verified yet'
-        else:
-            result['verdict'] = (
-                f'❌ Paystack rejected: {payload.get("message", "unknown")}. '
-                'Most likely your account is not yet verified — check '
-                'dashboard.paystack.com → Compliance'
-            )
-
-        return jsonify(result)
-
-    except Exception as e:
-        return jsonify({
-            'step': 'request_failed',
-            'error': str(e),
-            'verdict': '❌ Could not reach Paystack API at all',
-        })
-
-
-@app.route('/api/me/subaccount', methods=['POST'])
-@verified_required
-def api_me_subaccount():
-    if not paystack:
-        return jsonify({'error': 'Paystack not configured'}), 500
-
-    u = current_user()
-    d = request.get_json() or {}
-    account_number = d.get('account_number', '').strip()
-    bank_code = d.get('bank_code', '').strip()
-    account_name = d.get('account_name', '').strip()
-
-    if not all([account_number, bank_code, account_name]):
-        return jsonify({'error': 'All fields required'}), 400
-
-    try:
-        response = paystack.subaccount.create(
-            business_name=u.full_name,
-            settlement_bank=bank_code,
-            account_number=account_number,
-            percentage_charge=5,
-        )
-        if response.get('status'):
-            u.subaccount_code = response['data']['subaccount_code']
-            db.session.commit()
-            return jsonify({'ok': True, 'subaccount_code': u.subaccount_code})
-        return jsonify({'error': response.get('message', 'Failed')}), 400
-    except Exception as e:
-        return jsonify({'error': str(e)}), 400
-
-
-# ─────────────────────────────────────────────
-# BUY LISTING (FIXED)
+# FLUTTERWAVE — Marketplace checkout
 # ─────────────────────────────────────────────
 @app.route('/api/market/buy/<int:listing_id>', methods=['POST'])
 @verified_required
 def buy_listing(listing_id):
-    if not paystack:
-        return jsonify({'error': 'Payment system not configured'}), 500
+    if not FLW_SECRET_KEY:
+        return jsonify({'error': 'Payment not configured'}), 500
 
     listing = Listing.query.get_or_404(listing_id)
     buyer = current_user()
 
     if listing.sold:
-        return jsonify({'error': 'This item is already sold'}), 400
+        return jsonify({'error': 'Already sold'}), 400
     if listing.user_id == buyer.id:
         return jsonify({'error': 'You cannot buy your own listing'}), 400
 
-    subaccount_code = getattr(listing.seller, 'subaccount_code', None)
+    tx_ref = generate_ref(f'buy{listing.id}')
 
     try:
-        kwargs = {
-            'email': buyer.email,
-            'amount': int(listing.price * 100),
-            'callback_url': url_for('market', _external=True),
-            'metadata': {
-                'type': 'marketplace_sale',
-                'listing_id': listing.id,
-                'buyer_id': buyer.id,
-                'seller_id': listing.seller.id,
+        r = requests.post(
+            'https://api.flutterwave.com/v3/payments',
+            headers={
+                'Authorization': f'Bearer {FLW_SECRET_KEY}',
+                'Content-Type': 'application/json',
             },
-        }
-        if subaccount_code:
-            kwargs['subaccount'] = subaccount_code
+            json={
+                'tx_ref': tx_ref,
+                'amount': str(listing.price),
+                'currency': 'NGN',
+                'redirect_url': url_for('market', _external=True),
+                'payment_options': 'banktransfer',
+                'customer': {
+                    'email': buyer.email,
+                    'name': buyer.full_name,
+                },
+                'customizations': {
+                    'title': 'FUNDAR Marketplace',
+                    'description': f'Payment for: {listing.title}',
+                },
+                'meta': {
+                    'type': 'marketplace_sale',
+                    'listing_id': listing.id,
+                    'buyer_id': buyer.id,
+                },
+            },
+            timeout=15,
+        )
+        r.raise_for_status()
+        data = r.json()
 
-        response = paystack.transaction.initialize(**kwargs)
+        if data.get('status') == 'success' and data.get('data', {}).get('link'):
+            return jsonify({'authorization_url': data['data']['link']})
 
-        if response.get('status'):
-            return jsonify({'authorization_url': response['data']['authorization_url']})
-        return jsonify({'error': response.get('message', 'Payment failed')}), 400
+        return jsonify({'error': data.get('message', 'Could not start payment')}), 400
+
     except Exception as e:
-        print(f'Paystack error: {e}')
+        print(f'[FLW BUY] {e}')
         return jsonify({'error': 'Payment initialization failed'}), 500
 
 
+@app.route('/flutterwave/webhook', methods=['POST'])
+def flutterwave_webhook():
+    incoming = request.headers.get('verif-hash', '')
+    if not FLW_WEBHOOK_HASH or incoming != FLW_WEBHOOK_HASH:
+        return 'invalid signature', 401
+
+    payload = request.get_json(silent=True) or {}
+    if payload.get('event') != 'charge.completed':
+        return 'ok', 200
+
+    data = payload.get('data', {})
+    if data.get('status') != 'successful':
+        return 'ok', 200
+
+    meta = data.get('meta') or {}
+
+    if meta.get('type') == 'marketplace_sale':
+        listing_id = meta.get('listing_id')
+        buyer_id = meta.get('buyer_id')
+        ref = data.get('tx_ref')
+        listing = Listing.query.get(listing_id)
+        if listing and not listing.sold:
+            listing.sold = True
+            listing.sold_at = datetime.utcnow()
+            listing.buyer_id = buyer_id
+            listing.payment_reference = ref
+            db.session.commit()
+            print(f'✓ Sale: listing {listing_id} → buyer {buyer_id} ({ref})')
+
+    return 'ok', 200
+
+
 # ─────────────────────────────────────────────
-# AD PROMOTION — Pricing + Purchase
+# AD PROMOTION — manual OPay + admin activation
 # ─────────────────────────────────────────────
 @app.route('/api/ads/pricing')
 @verified_required
@@ -853,10 +716,6 @@ def api_ads_pricing():
 @app.route('/api/market/promote/<int:listing_id>', methods=['POST'])
 @verified_required
 def api_promote_listing(listing_id):
-    """Generate bank transfer details to promote a listing."""
-    if not paystack:
-        return jsonify({'error': 'Payment system not configured'}), 500
-
     u = current_user()
     listing = Listing.query.get_or_404(listing_id)
 
@@ -867,96 +726,108 @@ def api_promote_listing(listing_id):
 
     d = request.get_json() or {}
     days = int(d.get('days', 0))
-
     if days not in [t['days'] for t in AD_PRICING]:
         return jsonify({'error': 'Invalid duration'}), 400
 
-    price = get_ad_price(days)
+    amount = get_ad_price(days)
+    ref = generate_ref(f'ad{listing.id}')
 
-    try:
-        response = paystack.transaction.initialize(
-            email=u.email,
-            amount=int(price * 100),
-            channels=['bank_transfer'],
-            callback_url=url_for('market', _external=True),
-            metadata={
-                'type': 'ad_promotion',
-                'listing_id': listing.id,
-                'user_id': u.id,
-                'days': days,
-                'price': price,
-            }
-        )
-        if response.get('status'):
-            data = response['data']
-            return jsonify({
-                'account_number': data.get('account_number'),
-                'account_name': data.get('account_name'),
-                'bank_name': data.get('bank_name'),
-                'amount': price,
-                'reference': data.get('reference'),
-                'days': days,
-            })
-        return jsonify({'error': response.get('message', 'Could not initialize')}), 400
-    except Exception as e:
-        print(f'Promote error: {e}')
-        return jsonify({'error': 'Promotion setup failed'}), 500
+    payment = AdPayment(
+        listing_id=listing.id,
+        user_id=u.id,
+        days=days,
+        amount=amount,
+        status='pending',
+        reference=ref,
+    )
+    db.session.add(payment)
+    db.session.commit()
+
+    return jsonify({
+        'reference': ref,
+        'days': days,
+        'amount': amount,
+        'bank': AD_PAYMENT_BANK,
+        'account_number': AD_PAYMENT_ACCOUNT,
+        'account_name': AD_PAYMENT_NAME,
+    })
 
 
 # ─────────────────────────────────────────────
-# PAYSTACK WEBHOOK — handles sales + ads
+# ADMIN — ad payment activation
 # ─────────────────────────────────────────────
-@app.route('/paystack/webhook', methods=['POST'])
-def paystack_webhook():
-    event = request.json
-    if not event:
-        return '', 400
+@app.route(app.config['ADMIN_PATH'] + '/ads')
+def admin_ads():
+    u = current_user()
+    if not u or u.role != 'admin':
+        abort(404)
+    if not is_admin_unlocked():
+        return redirect(url_for('admin_login'))
+    touch_admin_session()
 
-    if event.get('event') != 'charge.success':
-        return '', 200
+    pending = AdPayment.query.filter_by(status='pending')\
+        .order_by(AdPayment.created_at.desc()).all()
+    recent = AdPayment.query.filter(AdPayment.status != 'pending')\
+        .order_by(AdPayment.approved_at.desc()).limit(30).all()
 
-    data = event['data']
-    reference = data['reference']
-    metadata = data.get('metadata', {})
-    payment_type = metadata.get('type')
+    return render_template('admin_ads.html', pending=pending, recent=recent)
 
-    # ── Ad promotion ──
-    if payment_type == 'ad_promotion':
-        listing_id = metadata.get('listing_id')
-        days = int(metadata.get('days', 0))
-        price = float(metadata.get('price', 0))
 
-        listing = Listing.query.get(listing_id)
-        if listing and days > 0:
-            # Extend from current expiry if still active, otherwise start now
-            if listing.featured_until and listing.featured_until > datetime.utcnow():
-                base = listing.featured_until
-            else:
-                base = datetime.utcnow()
+@app.route(app.config['ADMIN_PATH'] + '/ads/<int:pid>/approve', methods=['POST'])
+def admin_ads_approve(pid):
+    u = current_user()
+    if not u or u.role != 'admin':
+        abort(404)
+    if not is_admin_unlocked():
+        return redirect(url_for('admin_login'))
+    touch_admin_session()
 
-            listing.featured_until = base + timedelta(days=days)
-            listing.featured = True
-            listing.featured_days = (listing.featured_days or 0) + days
-            listing.featured_amount_paid = (listing.featured_amount_paid or 0) + price
-            listing.featured_last_payment_ref = reference
-            db.session.commit()
-            print(f'✓ Ad activated: listing {listing_id} for {days} days (ref: {reference})')
-        return '', 200
+    payment = AdPayment.query.get_or_404(pid)
+    if payment.status != 'pending':
+        flash('Already processed', 'error')
+        return redirect(url_for('admin_ads'))
 
-    # ── Marketplace sale ──
-    listing_id = metadata.get('listing_id')
-    buyer_id = metadata.get('buyer_id')
-    if listing_id:
-        listing = Listing.query.get(listing_id)
-        if listing and not listing.sold:
-            listing.sold = True
-            listing.sold_at = datetime.utcnow()
-            listing.buyer_id = buyer_id
-            listing.payment_reference = reference
-            db.session.commit()
-            print(f'✓ Sale completed: listing {listing_id} (ref: {reference})')
+    listing = payment.listing
+    if listing.featured_until and listing.featured_until > datetime.utcnow():
+        base = listing.featured_until
+    else:
+        base = datetime.utcnow()
 
-    return '', 200
+    listing.featured_until = base + timedelta(days=payment.days)
+    listing.featured = True
+    listing.featured_days = (listing.featured_days or 0) + payment.days
+    listing.featured_amount_paid = (listing.featured_amount_paid or 0) + payment.amount
+    listing.featured_last_payment_ref = payment.reference
+
+    payment.status = 'approved'
+    payment.approved_at = datetime.utcnow()
+    payment.approved_by = u.id
+
+    db.session.commit()
+    log_admin_action('ad_approve', target_user_id=payment.user_id, detail=payment.reference)
+    flash(f'Ad activated for {payment.days} days', 'success')
+    return redirect(url_for('admin_ads'))
+
+
+@app.route(app.config['ADMIN_PATH'] + '/ads/<int:pid>/reject', methods=['POST'])
+def admin_ads_reject(pid):
+    u = current_user()
+    if not u or u.role != 'admin':
+        abort(404)
+    if not is_admin_unlocked():
+        return redirect(url_for('admin_login'))
+    touch_admin_session()
+
+    payment = AdPayment.query.get_or_404(pid)
+    if payment.status == 'pending':
+        payment.status = 'rejected'
+        payment.approved_at = datetime.utcnow()
+        payment.approved_by = u.id
+        db.session.commit()
+        log_admin_action('ad_reject', target_user_id=payment.user_id, detail=payment.reference)
+
+    flash('Ad payment rejected', 'success')
+    return redirect(url_for('admin_ads'))
 
 
 # ─────────────────────────────────────────────
@@ -1327,8 +1198,15 @@ def api_me_update():
         u.full_name = d['full_name'].strip()[:120]
     if 'bio' in d:
         u.bio = (d['bio'] or '')[:200]
+    if 'whatsapp_number' in d:
+        u.whatsapp_number = (d['whatsapp_number'] or '')[:20]
     db.session.commit()
-    return jsonify({'ok': True, 'full_name': u.full_name, 'bio': u.bio})
+    return jsonify({
+        'ok': True,
+        'full_name': u.full_name,
+        'bio': u.bio,
+        'whatsapp_number': getattr(u, 'whatsapp_number', '') or '',
+    })
 
 
 @app.route('/api/me/posts')
@@ -1770,14 +1648,44 @@ def api_debug_users():
         'id': u.id, 'name': u.full_name, 'email': u.email,
         'role': u.role, 'status': u.verification_status,
         'has_picture': bool(u.profile_picture_path),
+        'whatsapp': getattr(u, 'whatsapp_number', '') or '',
     } for u in users])
 
 
 # ─────────────────────────────────────────────
-# INIT — no drop_all, DB persists
+# INIT
 # ─────────────────────────────────────────────
 with app.app_context():
     db.create_all()
+
+    # ── AUTO-MIGRATE: add columns missing from legacy SQLite DBs ──
+    # create_all() never adds columns to existing tables. If this DB was
+    # created before a column was added to models.py, the next query crashes
+    # with "no such column". Repair the schema on every startup.
+    # No-op on fresh DBs (create_all already built every column).
+    if app.config['SQLALCHEMY_DATABASE_URI'].startswith('sqlite:///'):
+        from sqlalchemy import inspect, text
+        insp = inspect(db.engine)
+        tables = set(insp.get_table_names())
+        wanted = {
+            'users': {
+                'whatsapp_number':         'VARCHAR(20)',
+                'bio':                     'VARCHAR(200)',
+                'subaccount_code':         'VARCHAR(50)',
+                'paystack_recipient_code': 'VARCHAR(50)',
+            },
+        }
+        with db.engine.begin() as conn:
+            for table, cols in wanted.items():
+                if table not in tables:
+                    continue
+                have = {c['name'] for c in insp.get_columns(table)}
+                for col, typ in cols.items():
+                    if col not in have:
+                        conn.execute(text(
+                            f'ALTER TABLE "{table}" ADD COLUMN "{col}" {typ}'
+                        ))
+                        print(f'✓ auto-migrate: {table}.{col}')
 
     admin_email = os.environ.get('ADMIN_EMAIL', 'oladipobright12@gmail.com')
     admin_pass = os.environ.get('ADMIN_PASSWORD', 'bright_kelvin*$')
@@ -1815,6 +1723,8 @@ if __name__ == '__main__':
     print(f'  ADMIN KEY  : {app.config["ADMIN_KEY"]}')
     print(f'  ADMIN LOGIN: /admin-login')
     print(f'  ADMIN EMAIL: {os.environ.get("ADMIN_EMAIL", "oladipobright12@gmail.com")}')
+    print(f'  FLW READY  : {"YES" if FLW_SECRET_KEY else "NO"}')
+    print(f'  OPAY       : {AD_PAYMENT_ACCOUNT} ({AD_PAYMENT_NAME})')
     print('=' * 60)
 
     if debug:

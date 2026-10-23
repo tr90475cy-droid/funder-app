@@ -1,0 +1,65 @@
+{% extends "base.html" %}
+{% block title %}Ad Payments{% endblock %}
+{% block content %}
+<div class="admin-wrap">
+  <div class="admin-head">
+    <div>
+      <h1>Ad <em>Payments</em></h1>
+      <p class="sub">Confirm OPay transfers, then activate ads</p>
+    </div>
+    <a href="{{ url_for('admin') }}" class="btn btn-ghost btn-sm">Back</a>
+  </div>
+
+  <h2 class="admin-section-title">Pending ({{ pending|length }})</h2>
+
+  {% if not pending %}<div class="empty">No pending ad payments.</div>{% endif %}
+
+  {% for p in pending %}
+    <div class="verify-card">
+      <div class="verify-head">
+        <div>
+          <div class="verify-name">{{ p.user.full_name }}</div>
+          <div class="verify-contact">
+            <strong>{{ p.listing.title }}</strong> · {{ p.days }}d · ₦{{ '%.0f'|format(p.amount) }}
+          </div>
+          <div style="font-family: monospace; font-size: 11px; color: var(--text-muted);">
+            Ref: {{ p.reference }}
+          </div>
+        </div>
+        <span class="tag tag-pending">Pending</span>
+      </div>
+      <p class="field-hint">
+        Ask the seller to transfer ₦{{ '%.0f'|format(p.amount) }} to OPay
+        <strong>9047552401</strong> — Oladipo Precious Adeola. Once confirmed, tap Activate.
+      </p>
+      <div class="verify-actions">
+        <form method="POST" action="{{ url_for('admin_ads_approve', pid=p.id) }}" style="flex:1;">
+          <button class="btn btn-success btn-block">✓ Activate</button>
+        </form>
+        <form method="POST" action="{{ url_for('admin_ads_reject', pid=p.id) }}" style="flex:1;">
+          <button class="btn btn-danger btn-block">✕ Reject</button>
+        </form>
+      </div>
+    </div>
+  {% endfor %}
+
+  {% if recent %}
+    <h2 class="admin-section-title" style="margin-top: 36px;">Recent</h2>
+    {% for p in recent %}
+      <div class="verify-card" style="opacity: .75;">
+        <div class="recent-head">
+          <div>
+            <div class="recent-name">{{ p.user.full_name }}</div>
+            <div class="recent-meta">{{ p.listing.title }} · {{ p.days }}d · ₦{{ '%.0f'|format(p.amount) }}</div>
+          </div>
+          {% if p.status == 'approved' %}
+            <span class="tag tag-approved">Approved</span>
+          {% else %}
+            <span class="tag tag-rejected">Rejected</span>
+          {% endif %}
+        </div>
+      </div>
+    {% endfor %}
+  {% endif %}
+</div>
+{% endblock %}

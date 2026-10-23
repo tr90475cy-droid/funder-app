@@ -1,6 +1,6 @@
 {% extends "base.html" %}
 
-{% block title %}Admin{% endblock %}
+{% block title %}Admin · FUNDAR{% endblock %}
 
 {% block content %}
 
@@ -13,8 +13,10 @@
       <p class="sub">Review student verifications and manage the campus</p>
     </div>
     <div class="admin-head-actions">
-      <a href="{{ url_for('home') }}" class="btn btn-ghost btn-sm">View Feed</a>
-      <a href="{{ url_for('logout') }}" class="btn btn-ghost btn-sm">Sign out</a>
+      <a href="{{ url_for('home') }}"           class="btn btn-ghost btn-sm">View Feed</a>
+      <a href="{{ url_for('admin_log_view') }}" class="btn btn-ghost btn-sm">Audit Log</a>
+      <a href="{{ url_for('admin_lock') }}"     class="btn btn-ghost btn-sm">Lock</a>
+      <a href="{{ url_for('logout') }}"         class="btn btn-ghost btn-sm">Sign out</a>
     </div>
   </div>
 
@@ -33,13 +35,16 @@
       <div class="stat-label">Recently Rejected</div>
     </div>
     <div class="stat">
-      <div class="stat-num">{{ pending|length + (recent|length) }}</div>
-      <div class="stat-label">Total Submissions</div>
+      <div class="stat-num">{{ (pending|length) + (recent|length) }}</div>
+      <div class="stat-label">Pending + Recent</div>
     </div>
   </div>
 
   <!-- ═══════════ PENDING VERIFICATIONS ═══════════ -->
-  <h2 class="admin-section-title">Pending Verifications</h2>
+  <h2 class="admin-section-title">
+    Pending Verifications
+    {% if pending %}<span class="badge">{{ pending|length }}</span>{% endif %}
+  </h2>
 
   {% if not pending %}
     <div class="empty">
@@ -49,8 +54,10 @@
   {% endif %}
 
   {% for v in pending %}
-    {% set flags = v.ai_flags|fromjson %}
-    {% set score = v.ai_score or 0 %}
+    {% set flags  = (v.ai_flags|fromjson) if v.ai_flags else [] %}
+    {% set score  = (v.ai_score or 0)|float %}
+    {% set path   = v.admission_letter_path or '' %}
+    {% set is_pdf = path.lower().endswith('.pdf') %}
 
     <div class="verify-card" data-vid="{{ v.id }}">
 
@@ -124,17 +131,19 @@
 
       <!-- ── DOCUMENT PREVIEW ── -->
       <div class="verify-doc">
-        {% if v.admission_letter_path %}
-          {% if v.admission_letter_path.lower().endswith('.pdf') %}
-            <a href="{{ url_for('uploaded_file', filename=v.admission_letter_path) }}"
+        {% if path %}
+          {% if is_pdf %}
+            <a href="{{ url_for('uploaded_file', filename=path) }}"
                target="_blank" rel="noopener">
               📄 Open PDF document in new tab
             </a>
           {% else %}
-            <a href="{{ url_for('uploaded_file', filename=v.admission_letter_path) }}"
+            <a href="{{ url_for('uploaded_file', filename=path) }}"
                target="_blank" rel="noopener">
-              <img src="{{ url_for('uploaded_file', filename=v.admission_letter_path) }}"
-                   alt="Admission letter for {{ v.user.full_name }}">
+              <img src="{{ url_for('uploaded_file', filename=path) }}"
+                   alt="Admission letter for {{ v.user.full_name }}"
+                   loading="lazy"
+                   decoding="async">
             </a>
             <p class="field-hint" style="text-align:center; margin-top:8px;">
               Tap image to open full size
@@ -149,20 +158,32 @@
       <div class="verify-actions">
 
         <!-- Approve -->
-        <form method="POST" action="{{ url_for('admin_approve', vid=v.id) }}">
+        <form method="POST"
+              action="{{ url_for('admin_approve', vid=v.id) }}"
+              class="approve-form"
+              data-confirm="Approve {{ v.user.full_name }}?">
+          {% if csrf_token is defined %}
+            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+          {% endif %}
           <button type="submit" class="btn btn-success btn-block">
             ✓ Approve
           </button>
         </form>
 
         <!-- Reject with reason -->
-        <form method="POST" action="{{ url_for('admin_reject', vid=v.id) }}"
-              class="reject-form">
+        <form method="POST"
+              action="{{ url_for('admin_reject', vid=v.id) }}"
+              class="reject-form"
+              data-confirm="Reject {{ v.user.full_name }}?">
+          {% if csrf_token is defined %}
+            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+          {% endif %}
           <input type="text"
                  name="reason"
                  placeholder="Rejection reason (e.g. blurry document)"
                  class="reject-input"
-                 maxlength="200">
+                 maxlength="200"
+                 required>
           <button type="submit" class="btn btn-danger btn-block">
             ✕ Reject
           </button>
@@ -174,9 +195,14 @@
   {% endfor %}
 
   <!-- ═══════════ RECENT DECISIONS ═══════════ -->
-  {% if recent %}
-    <h2 class="admin-section-title" style="margin-top:36px;">Recent Decisions</h2>
+  <h2 class="admin-section-title" style="margin-top:36px;">
+    Recent Decisions
+    <a href="{{ url_for('admin_log_view') }}"
+       class="btn btn-ghost btn-sm"
+       style="float:right; text-transform:none;">View full audit log →</a>
+  </h2>
 
+  {% if recent %}
     <div class="recent-list">
       {% for v in recent %}
         <div class="verify-card">
@@ -206,8 +232,22 @@
         </div>
       {% endfor %}
     </div>
+  {% else %}
+    <div class="empty" style="padding:24px;">
+      No decisions yet — reviews will appear here once you approve or reject.
+    </div>
   {% endif %}
 
 </div>
+
+{% if request.endpoint == 'admin' %}
+<script>
+  document.querySelectorAll('form[data-confirm]').forEach(function (form) {
+    form.addEventListener('submit', function (e) {
+      if (!confirm(form.dataset.confirm)) e.preventDefault();
+    });
+  });
+</script>
+{% endif %}
 
 {% endblock %}

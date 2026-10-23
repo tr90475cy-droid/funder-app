@@ -10,23 +10,21 @@
       </a>
       <div class="header-brand-text">
         <div class="header-brand-name">Marketplace</div>
-        <div class="header-brand-sub">Lead City University</div>
+        <div class="header-brand-sub">Buy & sell on campus</div>
       </div>
     </div>
     <button class="btn btn-primary btn-sm" id="newListingBtn">+ Sell</button>
   </header>
 
-  <!-- ═══════════ SELLER PAYMENTS BANNER ═══════════ -->
-  <div class="seller-banner hidden" id="sellerBanner">
-    <div class="seller-banner-icon">💳</div>
-    <div class="seller-banner-body">
-      <div class="seller-banner-title">Set up payments to sell</div>
-      <div class="seller-banner-sub">Add your bank details once. Get paid directly when you sell.</div>
-    </div>
-    <button class="btn btn-primary btn-sm" id="setupBankBtn">Set up</button>
+  <!-- Search bar (Facebook-style) -->
+  <div class="market-search-wrap">
+    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+      <circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/>
+    </svg>
+    <input type="text" id="marketSearch" placeholder="Search Marketplace…" autocomplete="off">
   </div>
 
-  <!-- ═══════════ CATEGORY FILTERS ═══════════ -->
+  <!-- Category chips -->
   <div class="chips" id="marketChips">
     <button class="chip active" data-cat="all">All</button>
     <button class="chip" data-cat="books">📚 Books</button>
@@ -36,14 +34,14 @@
     <button class="chip" data-cat="other">📦 Other</button>
   </div>
 
-  <!-- ═══════════ FEATURED LISTINGS ═══════════ -->
+  <!-- Featured -->
   <div id="featuredSection" class="hidden">
-    <div class="section-label">Featured <em>listings</em></div>
+    <div class="section-label">⭐ Featured <em>listings</em></div>
     <div class="market-grid" id="featuredGrid"></div>
   </div>
 
-  <!-- ═══════════ ALL LISTINGS ═══════════ -->
-  <div class="section-label">Campus <em>market</em></div>
+  <!-- Regular listings -->
+  <div class="section-label">Fresh on <em>campus</em></div>
   <div class="market-grid" id="marketGrid">
     <div class="empty">Loading listings…</div>
   </div>
@@ -56,85 +54,53 @@
   <div class="modal">
     <div class="modal-head">
       <button class="modal-close" id="listingClose">✕</button>
-      <div class="modal-title">New Listing</div>
+      <div class="modal-title">Sell something</div>
       <button class="post-btn" id="listingPost" disabled>Post</button>
     </div>
-
     <form id="listingForm">
       <div class="field">
-        <label>Title</label>
+        <label>What are you selling?</label>
         <input type="text" name="title" placeholder="e.g. ICAN Accounting Study Text" required>
       </div>
-      <div class="field">
-        <label>Price (₦)</label>
-        <input type="number" name="price" placeholder="4500" required min="0">
-      </div>
-      <div class="field">
-        <label>Category</label>
-        <select name="category" required>
-          <option value="books">Books</option>
-          <option value="electronics">Electronics</option>
-          <option value="furniture">Furniture</option>
-          <option value="services">Services</option>
-          <option value="other">Other</option>
-        </select>
+      <div class="grid-2">
+        <div class="field">
+          <label>Price (₦)</label>
+          <input type="number" name="price" placeholder="4500" required min="0">
+        </div>
+        <div class="field">
+          <label>Category</label>
+          <select name="category" required>
+            <option value="books">Books</option>
+            <option value="electronics">Electronics</option>
+            <option value="furniture">Furniture</option>
+            <option value="services">Services</option>
+            <option value="other">Other</option>
+          </select>
+        </div>
       </div>
       <div class="field">
         <label>Description</label>
         <textarea name="description" placeholder="Condition, pickup location, etc."></textarea>
       </div>
       <div class="field">
-        <label>Photo (optional)</label>
+        <label>Photo</label>
         <input type="file" name="image" accept="image/*">
+      </div>
+
+      <div class="field">
+        <label>WhatsApp number <span class="text-muted">(optional)</span></label>
+        <input type="tel" name="whatsapp_number" id="listingWhatsapp"
+               placeholder="e.g. 2348012345678" maxlength="20">
+        <p class="field-hint">
+          Buyers can tap a WhatsApp button to message you directly. Include country code, no + or spaces.
+        </p>
       </div>
     </form>
   </div>
 </div>
 
 <!-- ═══════════════════════════════════════════
-     BANK SETUP MODAL (for sellers)
-     ═══════════════════════════════════════════ -->
-<div class="modal-back" id="bankSetupModal">
-  <div class="modal">
-    <div class="modal-head">
-      <button class="modal-close" id="bankSetupClose">✕</button>
-      <div class="modal-title">Set up payments</div>
-      <button class="post-btn" id="bankSetupSave" disabled>Save</button>
-    </div>
-
-    <p class="field-hint" style="margin-bottom: 14px;">
-      Enter your Nigerian bank details. You'll receive payments directly for your sales.
-      FUNDAR charges a small commission on each sale.
-    </p>
-
-    <div class="field">
-      <label for="bankSelect">Bank</label>
-      <select id="bankSelect">
-        <option value="">Loading banks…</option>
-      </select>
-    </div>
-
-    <div class="field">
-      <label for="accountNumber">Account number</label>
-      <input type="text" id="accountNumber" maxlength="10" inputmode="numeric"
-             placeholder="0123456789" autocomplete="off">
-    </div>
-
-    <div class="field">
-      <label for="accountName">Account name</label>
-      <input type="text" id="accountName" readonly placeholder="Will appear after verification">
-      <p class="field-hint" id="verifyHint">Enter a 10-digit account number to verify.</p>
-    </div>
-
-    <div class="field">
-      <label for="dobField">Date of birth (for Paystack)</label>
-      <input type="date" id="dobField">
-    </div>
-  </div>
-</div>
-
-<!-- ═══════════════════════════════════════════
-     BUY CONFIRMATION MODAL
+     BUY MODAL
      ═══════════════════════════════════════════ -->
 <div class="modal-back" id="buyModal">
   <div class="modal">
@@ -143,60 +109,54 @@
       <div class="modal-title">Confirm purchase</div>
       <div class="modal-head-spacer"></div>
     </div>
-
     <div id="buyContent">
-      <p style="font-size: 14px; color: var(--text-soft); margin-bottom: 16px;">
-        You'll be redirected to Paystack to complete payment securely.
+      <p class="field-hint" style="margin-bottom: 14px;">
+        You'll be redirected to a secure checkout to pay by bank transfer.
       </p>
       <div id="buyItemCard" class="buy-item-card"></div>
     </div>
-
     <button class="btn btn-primary btn-block" id="buyProceedBtn" style="margin-top: 18px;">
-      Pay with Paystack →
+      Pay securely →
     </button>
   </div>
 </div>
 
 <!-- ═══════════════════════════════════════════
-     PROMOTE LISTING MODAL (with bank transfer)
+     BOOST MODAL (Facebook-style: pick tier → see OPay instantly)
      ═══════════════════════════════════════════ -->
 <div class="modal-back" id="promoteModal">
   <div class="modal">
     <div class="modal-head">
       <button class="modal-close" id="promoteClose">✕</button>
-      <div class="modal-title">Promote listing</div>
+      <div class="modal-title">Boost listing</div>
       <div class="modal-head-spacer"></div>
     </div>
 
-    <!-- Step 1: choose duration -->
+    <!-- Step 1: pick duration -->
     <div id="promoSelectionStep">
       <p class="field-hint" style="margin-bottom: 14px;">
-        Boost your listing to the top of the marketplace.
-        Pay per day — cheaper for longer runs.
+        Get more eyes on your listing. Boosted items appear at the top of the marketplace.
       </p>
       <div class="promo-tiers" id="promoPricing">
         <div class="empty">Loading prices…</div>
       </div>
-      <button class="btn btn-primary btn-block" id="promoteProceedBtn" disabled style="margin-top: 16px;">
-        Select a duration
-      </button>
     </div>
 
-    <!-- Step 2: show bank transfer details -->
+    <!-- Step 2: pay (shown instantly after picking a tier) -->
     <div id="promoPaymentStep" class="hidden">
-      <p class="field-hint" style="margin-bottom: 14px;">
-        Transfer the exact amount to the account below.
-        Your promotion starts automatically once payment is confirmed.
-      </p>
-      <div class="transfer-details-card" id="transferDetails">
-        <!-- Injected by JS -->
-      </div>
+      <div class="boost-summary" id="boostSummary"></div>
+
+      <div class="transfer-details-card" id="transferDetails"></div>
+
       <button class="btn btn-primary btn-block" id="promoDoneBtn" style="margin-top: 16px;">
-        I have sent the money
+        ✓ I've sent the money
       </button>
       <p class="field-hint" style="text-align: center; margin-top: 10px;">
-        Your listing will be featured within 2–3 minutes after payment.
+        Admin will activate your boost within minutes of confirming your transfer.
       </p>
+      <button class="btn btn-ghost btn-block btn-sm" id="promoBackBtn" style="margin-top: 8px;">
+        ← Pick a different duration
+      </button>
     </div>
   </div>
 </div>
@@ -204,4 +164,4 @@
 {% endblock %}
 {% block scripts %}
 <script src="{{ url_for('static', filename='js/market.js') }}"></script>
-{% endblock %}
+{% endblock %}   

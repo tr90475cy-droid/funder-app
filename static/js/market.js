@@ -1,53 +1,42 @@
 (() => {
   'use strict';
 
-  // ── Element refs ──
-  const gridEl         = document.getElementById('marketGrid');
-  const featuredGrid   = document.getElementById('featuredGrid');
-  const featuredSec    = document.getElementById('featuredSection');
-  const chipsEl        = document.getElementById('marketChips');
-  const listingModal   = document.getElementById('listingModal');
-  const listingClose   = document.getElementById('listingClose');
-  const listingPost    = document.getElementById('listingPost');
-  const listingForm    = document.getElementById('listingForm');
-  const newListingBtn  = document.getElementById('newListingBtn');
+  const $ = id => document.getElementById(id);
 
-  const sellerBanner   = document.getElementById('sellerBanner');
-  const setupBankBtn   = document.getElementById('setupBankBtn');
-  const bankModal      = document.getElementById('bankSetupModal');
-  const bankClose      = document.getElementById('bankSetupClose');
-  const bankSave       = document.getElementById('bankSetupSave');
-  const bankSelect     = document.getElementById('bankSelect');
-  const accountNumber  = document.getElementById('accountNumber');
-  const accountName    = document.getElementById('accountName');
-  const verifyHint     = document.getElementById('verifyHint');
-  const dobField       = document.getElementById('dobField');
+  const gridEl         = $('marketGrid');
+  const featuredGrid   = $('featuredGrid');
+  const featuredSec    = $('featuredSection');
+  const chipsEl        = $('marketChips');
+  const searchInput    = $('marketSearch');
+  const listingModal   = $('listingModal');
+  const listingClose   = $('listingClose');
+  const listingPost    = $('listingPost');
+  const listingForm    = $('listingForm');
+  const newListingBtn  = $('newListingBtn');
+  const listingWhatsapp = $('listingWhatsapp');
 
-  const buyModal       = document.getElementById('buyModal');
-  const buyClose       = document.getElementById('buyClose');
-  const buyItemCard    = document.getElementById('buyItemCard');
-  const buyProceedBtn  = document.getElementById('buyProceedBtn');
+  const buyModal       = $('buyModal');
+  const buyClose       = $('buyClose');
+  const buyItemCard    = $('buyItemCard');
+  const buyProceedBtn  = $('buyProceedBtn');
 
-  const promoteModal        = document.getElementById('promoteModal');
-  const promoteClose        = document.getElementById('promoteClose');
-  const promoPricing        = document.getElementById('promoPricing');
-  const promoteProceedBtn   = document.getElementById('promoteProceedBtn');
-  const promoSelectionStep  = document.getElementById('promoSelectionStep');
-  const promoPaymentStep    = document.getElementById('promoPaymentStep');
-  const transferDetails     = document.getElementById('transferDetails');
-  const promoDoneBtn        = document.getElementById('promoDoneBtn');
+  const promoteModal       = $('promoteModal');
+  const promoteClose       = $('promoteClose');
+  const promoPricing       = $('promoPricing');
+  const promoSelectionStep = $('promoSelectionStep');
+  const promoPaymentStep   = $('promoPaymentStep');
+  const boostSummary       = $('boostSummary');
+  const transferDetails    = $('transferDetails');
+  const promoDoneBtn       = $('promoDoneBtn');
+  const promoBackBtn       = $('promoBackBtn');
 
-  // ── State ──
-  let currentCategory   = 'all';
-  let pendingBuyId      = null;
-  let pendingPromoteId  = null;
-  let selectedTier      = null;
-  let banks             = [];
-  let banksLoaded       = false;
-  let verifiedAccount   = null;
-  let pricingLoaded     = false;
-  let verifyTimer       = null;
-  let verifyRequestId   = 0;
+  let currentCategory = 'all';
+  let currentSearch   = '';
+  let allListings     = [];
+  let pendingBuyId    = null;
+  let pendingPromoteId = null;
+  let pricingLoaded   = false;
+  let currentTier     = null;
 
   function esc(s) {
     return String(s == null ? '' : s).replace(/[&<>"']/g, m => ({
@@ -55,34 +44,45 @@
     }[m]));
   }
 
-  // ═══════════════════════════════════════════════════
-  // LISTINGS
-  // ═══════════════════════════════════════════════════
+  // ── LOAD & RENDER LISTINGS ──
   async function loadListings() {
     gridEl.innerHTML = '<div class="empty">Loading…</div>';
     try {
       const r = await fetch('/api/listings?category=' + currentCategory);
-      const items = await r.json();
-
-      const featured = items.filter(l => l.featured && !l.sold);
-      const regular  = items.filter(l => !l.featured || l.sold);
-
-      if (featured.length) {
-        featuredSec.classList.remove('hidden');
-        featuredGrid.innerHTML = featured.map(l => listingHtml(l, true)).join('');
-      } else {
-        featuredSec.classList.add('hidden');
-        featuredGrid.innerHTML = '';
-      }
-
-      if (!regular.length && !featured.length) {
-        gridEl.innerHTML = '<div class="empty">No listings in this category yet.</div>';
-        return;
-      }
-      gridEl.innerHTML = regular.map(l => listingHtml(l, false)).join('');
+      allListings = await r.json();
+      renderListings();
     } catch {
       gridEl.innerHTML = '<div class="empty">Could not load listings.</div>';
     }
+  }
+
+  function renderListings() {
+    // Apply search filter locally
+    let items = allListings;
+    if (currentSearch) {
+      const q = currentSearch.toLowerCase();
+      items = items.filter(l =>
+        (l.title || '').toLowerCase().includes(q) ||
+        (l.description || '').toLowerCase().includes(q)
+      );
+    }
+
+    const featured = items.filter(l => l.featured && !l.sold);
+    const regular  = items.filter(l => !l.featured || l.sold);
+
+    if (featured.length) {
+      featuredSec.classList.remove('hidden');
+      featuredGrid.innerHTML = featured.map(l => listingHtml(l, true)).join('');
+    } else {
+      featuredSec.classList.add('hidden');
+      featuredGrid.innerHTML = '';
+    }
+
+    if (!regular.length && !featured.length) {
+      gridEl.innerHTML = `<div class="empty">${currentSearch ? 'No matches for "' + esc(currentSearch) + '"' : 'No listings here yet.'}</div>`;
+      return;
+    }
+    gridEl.innerHTML = regular.map(l => listingHtml(l, false)).join('');
   }
 
   function listingHtml(l, isFeatured) {
@@ -92,62 +92,155 @@
     const sold = l.sold ? '<div class="listing-sold">SOLD</div>' : '';
     const featuredBadge = isFeatured ? '<div class="listing-featured-badge">⭐ Featured</div>' : '';
 
-    let actionHtml = '';
+    // Verified seller badge
+    const verifiedBadge = l.seller_verified !== false
+      ? '<span class="seller-verified" title="Verified student">✓</span>'
+      : '';
 
+    const waDigits = (l.seller_whatsapp || '').replace(/\D/g, '');
+
+    // Owner controls (only on own listings)
+    let ownerControls = '';
     if (l.mine) {
       if (l.sold) {
-        actionHtml = `<button class="listing-sold-btn" data-sold="${l.id}">Mark available</button>`;
+        ownerControls = `<button class="listing-sold-btn" data-sold="${l.id}">Mark available</button>`;
       } else {
-        actionHtml = `
+        ownerControls = `
           <button class="listing-sold-btn" data-sold="${l.id}">Mark sold</button>
           <button class="listing-promote-btn" data-promote="${l.id}">
-            ${l.featured ? `⭐ Boosted · ${l.days_remaining}d left` : '🚀 Promote'}
+            ${l.featured ? `⭐ Boosted · ${l.days_remaining}d left` : '🚀 Boost listing'}
           </button>`;
       }
     } else if (!l.sold) {
-      actionHtml = `<button class="listing-buy-btn" data-buy="${l.id}">Buy now</button>`;
+      ownerControls = `<button class="listing-buy-btn" data-buy="${l.id}">Buy now</button>`;
+    }
+
+    // Contact buttons — the heart of FB Marketplace UX
+    let contact = '';
+    if (l.mine) {
+      // Preview for the owner
+      contact = `
+        <div class="listing-contact-row">
+          <button class="listing-contact-btn" disabled title="Buyers tap this to chat">
+            💬 Message
+          </button>
+          ${waDigits
+            ? `<a class="listing-contact-btn wa" href="https://wa.me/${esc(waDigits)}"
+                  target="_blank" rel="noopener" title="Your WhatsApp — buyers tap this">
+                  🟢 WhatsApp
+                </a>`
+            : `<button class="listing-contact-btn wa-add" data-add-wa="${l.id}"
+                       title="Add WhatsApp so buyers can message you directly">
+                  🟢 Add WhatsApp
+                </button>`}
+        </div>
+      `;
+    } else {
+      contact = `
+        <div class="listing-contact-row">
+          <button class="listing-contact-btn primary" data-message="${l.seller_id}">
+            💬 Message
+          </button>
+          ${waDigits
+            ? `<a class="listing-contact-btn wa" href="https://wa.me/${esc(waDigits)}"
+                  target="_blank" rel="noopener">
+                  🟢 WhatsApp
+                </a>`
+            : ''}
+        </div>
+      `;
     }
 
     return `
-      <div class="listing ${l.sold ? 'is-sold' : ''} ${isFeatured ? 'is-featured' : ''}">
+      <div class="listing ${l.sold ? 'is-sold' : ''} ${isFeatured ? 'is-featured' : ''}" data-id="${l.id}">
         <div class="listing-img-wrap">
           ${img}
           ${sold}
           ${featuredBadge}
         </div>
         <div class="listing-body">
-          <div class="listing-title">${esc(l.title)}</div>
           <div class="listing-price">₦${Number(l.price).toLocaleString()}</div>
-          <div class="listing-meta">${esc(l.seller)} · ${esc(l.time)}</div>
-          ${actionHtml}
+          <div class="listing-title">${esc(l.title)}</div>
+          <div class="listing-seller">
+            ${esc(l.seller)} ${verifiedBadge} · ${esc(l.time)}
+          </div>
+          ${ownerControls}
+          ${contact}
         </div>
       </div>
     `;
   }
 
-  // Global click handler for cards
+  // ── CLICK HANDLER ──
   document.addEventListener('click', async (e) => {
-    const buyBtn = e.target.closest('[data-buy]');
-    if (buyBtn) {
-      openBuyModal(parseInt(buyBtn.dataset.buy, 10));
-      return;
-    }
-    const soldBtn = e.target.closest('[data-sold]');
-    if (soldBtn) {
-      await fetch('/api/listings/' + soldBtn.dataset.sold + '/sold', { method: 'POST' });
+    const buy = e.target.closest('[data-buy]');
+    if (buy) { openBuyModal(parseInt(buy.dataset.buy, 10)); return; }
+
+    const sold = e.target.closest('[data-sold]');
+    if (sold) {
+      await fetch('/api/listings/' + sold.dataset.sold + '/sold', { method: 'POST' });
       loadListings();
       return;
     }
-    const promoteBtn = e.target.closest('[data-promote]');
-    if (promoteBtn) {
-      openPromoteModal(parseInt(promoteBtn.dataset.promote, 10));
+
+    const promote = e.target.closest('[data-promote]');
+    if (promote) { openPromoteModal(parseInt(promote.dataset.promote, 10)); return; }
+
+    const message = e.target.closest('[data-message]');
+    if (message) {
+      const sellerId = message.dataset.message;
+      await fetch('/api/chat/dm/' + sellerId, { method: 'POST' });
+      window.location.href = '/chat?dm=' + sellerId;
+      return;
+    }
+
+    const addWa = e.target.closest('[data-add-wa]');
+    if (addWa) {
+      promptAddWhatsapp();
       return;
     }
   });
 
-  // ═══════════════════════════════════════════════════
-  // BUY
-  // ═══════════════════════════════════════════════════
+  function promptAddWhatsapp() {
+    const num = prompt(
+      'Add your WhatsApp number\n\n' +
+      'Buyers will tap a "WhatsApp" button on your listings to chat with you directly.\n' +
+      'Include country code, no + or spaces.\n\n' +
+      'Example: 2348012345678'
+    );
+    if (!num || !num.trim()) return;
+
+    fetch('/api/me', {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ whatsapp_number: num.trim().replace(/\D/g, '') })
+    }).then(r => r.json()).then(data => {
+      if (data.ok) {
+        alert('✓ WhatsApp number saved. Buyers can now message you directly!');
+        loadListings();
+      } else {
+        alert('Could not save — please try again.');
+      }
+    }).catch(() => alert('Could not save — please try again.'));
+  }
+
+  // ── SEARCH ──
+  searchInput.addEventListener('input', () => {
+    currentSearch = searchInput.value.trim();
+    renderListings();
+  });
+
+  // ── CATEGORY CHIPS ──
+  chipsEl.addEventListener('click', (e) => {
+    const chip = e.target.closest('.chip');
+    if (!chip || chip.classList.contains('active')) return;
+    chipsEl.querySelectorAll('.chip').forEach(c => c.classList.remove('active'));
+    chip.classList.add('active');
+    currentCategory = chip.dataset.cat;
+    loadListings();
+  });
+
+  // ── BUY MODAL ──
   async function openBuyModal(id) {
     pendingBuyId = id;
     buyModal.classList.add('open');
@@ -156,7 +249,6 @@
 
     try {
       const r = await fetch('/api/listings/' + id);
-      if (!r.ok) throw new Error();
       const l = await r.json();
       buyItemCard.innerHTML = `
         <div class="buy-item">
@@ -178,16 +270,16 @@
     document.body.style.overflow = '';
     pendingBuyId = null;
     buyProceedBtn.disabled = false;
-    buyProceedBtn.textContent = 'Pay with Paystack →';
+    buyProceedBtn.textContent = 'Pay securely →';
   }
 
   buyClose.addEventListener('click', closeBuyModal);
-  buyModal.addEventListener('click', (e) => { if (e.target === buyModal) closeBuyModal(); });
+  buyModal.addEventListener('click', e => { if (e.target === buyModal) closeBuyModal(); });
 
   buyProceedBtn.addEventListener('click', async () => {
     if (!pendingBuyId) return;
     buyProceedBtn.disabled = true;
-    buyProceedBtn.textContent = 'Opening Paystack…';
+    buyProceedBtn.textContent = 'Opening checkout…';
     try {
       const r = await fetch('/api/market/buy/' + pendingBuyId, { method: 'POST' });
       const data = await r.json();
@@ -196,37 +288,34 @@
       } else {
         alert(data.error || 'Could not start payment');
         buyProceedBtn.disabled = false;
-        buyProceedBtn.textContent = 'Pay with Paystack →';
+        buyProceedBtn.textContent = 'Pay securely →';
       }
     } catch {
-      alert('Payment could not start. Please try again.');
+      alert('Payment could not start. Try again.');
       buyProceedBtn.disabled = false;
-      buyProceedBtn.textContent = 'Pay with Paystack →';
+      buyProceedBtn.textContent = 'Pay securely →';
     }
   });
 
-  // ═══════════════════════════════════════════════════
-  // PROMOTE
-  // ═══════════════════════════════════════════════════
-  async function openPromoteModal(listingId) {
+  // ── BOOST MODAL (single-flow) ──
+  function openPromoteModal(listingId) {
     pendingPromoteId = listingId;
-    selectedTier = null;
-    promoteProceedBtn.disabled = true;
-    promoteProceedBtn.textContent = 'Select a duration';
+    currentTier = null;
     promoSelectionStep.classList.remove('hidden');
     promoPaymentStep.classList.add('hidden');
     promoteModal.classList.add('open');
     document.body.style.overflow = 'hidden';
 
     if (!pricingLoaded) {
-      try {
-        const r = await fetch('/api/ads/pricing');
-        const tiers = await r.json();
-        renderPricingTiers(tiers);
-        pricingLoaded = true;
-      } catch {
-        promoPricing.innerHTML = '<div class="empty">Could not load prices.</div>';
-      }
+      fetch('/api/ads/pricing')
+        .then(r => r.json())
+        .then(tiers => {
+          renderPricingTiers(tiers);
+          pricingLoaded = true;
+        })
+        .catch(() => {
+          promoPricing.innerHTML = '<div class="empty">Could not load prices.</div>';
+        });
     }
   }
 
@@ -241,52 +330,47 @@
     `).join('');
 
     promoPricing.querySelectorAll('.promo-tier').forEach(btn => {
-      btn.addEventListener('click', () => {
-        promoPricing.querySelectorAll('.promo-tier').forEach(b => b.classList.remove('selected'));
-        btn.classList.add('selected');
-        selectedTier = {
-          days: parseInt(btn.dataset.days, 10),
-          price: parseFloat(btn.dataset.price),
-        };
-        promoteProceedBtn.disabled = false;
-        promoteProceedBtn.textContent = `Pay ₦${selectedTier.price.toLocaleString()} for ${selectedTier.days} day${selectedTier.days !== 1 ? 's' : ''}`;
-      });
+      btn.addEventListener('click', () => pickTier(btn));
     });
   }
 
-  function closePromoteModal() {
-    promoteModal.classList.remove('open');
-    document.body.style.overflow = '';
-    pendingPromoteId = null;
-    selectedTier = null;
-  }
+  async function pickTier(btn) {
+    const days = parseInt(btn.dataset.days, 10);
+    const price = parseFloat(btn.dataset.price);
+    currentTier = { days, price };
 
-  promoteClose.addEventListener('click', closePromoteModal);
-  promoteModal.addEventListener('click', (e) => {
-    if (e.target === promoteModal) closePromoteModal();
-  });
-
-  promoteProceedBtn.addEventListener('click', async () => {
-    if (!pendingPromoteId || !selectedTier) return;
-    promoteProceedBtn.disabled = true;
-    promoteProceedBtn.textContent = 'Generating account…';
+    // Immediately fetch OPay details
+    promoPricing.querySelectorAll('.promo-tier').forEach(b => b.classList.remove('selected'));
+    btn.classList.add('selected');
 
     try {
       const r = await fetch('/api/market/promote/' + pendingPromoteId, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ days: selectedTier.days })
+        body: JSON.stringify({ days })
       });
       const data = await r.json();
 
       if (data.account_number) {
+        // Show payment step immediately
         promoSelectionStep.classList.add('hidden');
         promoPaymentStep.classList.remove('hidden');
+
+        boostSummary.innerHTML = `
+          <div class="boost-summary-inner">
+            <div class="boost-summary-icon">⭐</div>
+            <div class="boost-summary-body">
+              <div class="boost-summary-title">Boost for ${days} day${days !== 1 ? 's' : ''}</div>
+              <div class="boost-summary-sub">Your listing will appear at the top of the marketplace</div>
+            </div>
+            <div class="boost-summary-price">₦${price.toLocaleString()}</div>
+          </div>
+        `;
 
         transferDetails.innerHTML = `
           <div class="transfer-row">
             <span>Bank</span>
-            <strong>${esc(data.bank_name)}</strong>
+            <strong>${esc(data.bank)}</strong>
           </div>
           <div class="transfer-row">
             <span>Account Number</span>
@@ -300,17 +384,37 @@
             <span>Amount</span>
             <strong class="transfer-amount">₦${Number(data.amount).toLocaleString()}</strong>
           </div>
+          <div class="transfer-row">
+            <span>Reference</span>
+            <strong style="font-family: monospace; font-size: 12px;">${esc(data.reference)}</strong>
+          </div>
         `;
       } else {
-        alert(data.error || 'Could not generate account details.');
-        promoteProceedBtn.disabled = false;
-        promoteProceedBtn.textContent = `Pay ₦${selectedTier.price.toLocaleString()}`;
+        alert(data.error || 'Could not generate payment details.');
+        btn.classList.remove('selected');
       }
     } catch {
-      alert('An error occurred. Please try again.');
-      promoteProceedBtn.disabled = false;
-      promoteProceedBtn.textContent = `Pay ₦${selectedTier.price.toLocaleString()}`;
+      alert('Something went wrong. Please try again.');
+      btn.classList.remove('selected');
     }
+  }
+
+  function closePromoteModal() {
+    promoteModal.classList.remove('open');
+    document.body.style.overflow = '';
+    pendingPromoteId = null;
+    currentTier = null;
+  }
+
+  promoteClose.addEventListener('click', closePromoteModal);
+  promoteModal.addEventListener('click', e => {
+    if (e.target === promoteModal) closePromoteModal();
+  });
+
+  promoBackBtn.addEventListener('click', () => {
+    promoPaymentStep.classList.add('hidden');
+    promoSelectionStep.classList.remove('hidden');
+    promoPricing.querySelectorAll('.promo-tier').forEach(b => b.classList.remove('selected'));
   });
 
   promoDoneBtn.addEventListener('click', () => {
@@ -318,31 +422,12 @@
     loadListings();
   });
 
-  // ═══════════════════════════════════════════════════
-  // CATEGORY CHIPS
-  // ═══════════════════════════════════════════════════
-  chipsEl.addEventListener('click', (e) => {
-    const chip = e.target.closest('.chip');
-    if (!chip || chip.classList.contains('active')) return;
-    chipsEl.querySelectorAll('.chip').forEach(c => c.classList.remove('active'));
-    chip.classList.add('active');
-    currentCategory = chip.dataset.cat;
-    loadListings();
-  });
-
-  // ═══════════════════════════════════════════════════
-  // NEW LISTING
-  // ═══════════════════════════════════════════════════
-  newListingBtn.addEventListener('click', async () => {
-    const hasPayments = await checkSellerSetup();
-    if (!hasPayments) {
-      if (confirm('You need to set up your bank details to sell. Do that now?')) {
-        openBankModal();
-      }
-      return;
-    }
+  // ── NEW LISTING ──
+  newListingBtn.addEventListener('click', () => {
     listingModal.classList.add('open');
     document.body.style.overflow = 'hidden';
+
+    // Pre-fill WhatsApp if we can (optional — will save on post)
   });
 
   function closeListingModal() {
@@ -353,7 +438,7 @@
   }
 
   listingClose.addEventListener('click', closeListingModal);
-  listingModal.addEventListener('click', (e) => { if (e.target === listingModal) closeListingModal(); });
+  listingModal.addEventListener('click', e => { if (e.target === listingModal) closeListingModal(); });
 
   listingForm.addEventListener('input', () => {
     const data = new FormData(listingForm);
@@ -365,6 +450,22 @@
     if (!fd.get('title') || !fd.get('price')) return;
     listingPost.disabled = true;
     listingPost.textContent = 'Posting…';
+
+    // Save WhatsApp if provided and different
+    const wa = (fd.get('whatsapp_number') || '').trim();
+    if (wa) {
+      fd.delete('whatsapp_number');
+      try {
+        await fetch('/api/me', {
+          method: 'PATCH',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ whatsapp_number: wa.replace(/\D/g, '') })
+        });
+      } catch { /* non-blocking */ }
+    } else {
+      fd.delete('whatsapp_number');
+    }
+
     try {
       const r = await fetch('/api/listings', { method: 'POST', body: fd });
       if (r.ok) {
@@ -380,162 +481,6 @@
     }
   });
 
-  // ═══════════════════════════════════════════════════
-  // SELLER BANK SETUP
-  // ═══════════════════════════════════════════════════
-  async function checkSellerSetup() {
-    try {
-      const r = await fetch('/api/me/subaccount-status');
-      const data = await r.json();
-      if (!data.has_subaccount) {
-        sellerBanner.classList.remove('hidden');
-        return false;
-      }
-      sellerBanner.classList.add('hidden');
-      return true;
-    } catch {
-      sellerBanner.classList.remove('hidden');
-      return false;
-    }
-  }
-
-  setupBankBtn.addEventListener('click', openBankModal);
-
-  async function openBankModal() {
-    bankModal.classList.add('open');
-    document.body.style.overflow = 'hidden';
-    accountName.value = '';
-    accountNumber.value = '';
-    verifiedAccount = null;
-    bankSave.disabled = true;
-    verifyHint.textContent = 'Enter a 10-digit account number to verify.';
-
-    if (!banksLoaded) {
-      bankSelect.innerHTML = '<option value="">Loading banks…</option>';
-      try {
-        const r = await fetch('/api/paystack/banks');
-        const list = await r.json();
-
-        if (!Array.isArray(list) || list.length === 0) {
-          bankSelect.innerHTML = '<option value="">No banks available — try again later</option>';
-          return;
-        }
-
-        banks = list;
-        banksLoaded = true;
-        bankSelect.innerHTML = '<option value="">Select bank</option>' +
-          banks.map(b => `<option value="${esc(b.code)}">${esc(b.name)}</option>`).join('');
-      } catch {
-        bankSelect.innerHTML = '<option value="">Could not load banks</option>';
-      }
-    }
-  }
-
-  function closeBankModal() {
-    bankModal.classList.remove('open');
-    document.body.style.overflow = '';
-  }
-
-  bankClose.addEventListener('click', closeBankModal);
-  bankModal.addEventListener('click', (e) => { if (e.target === bankModal) closeBankModal(); });
-
-  accountNumber.addEventListener('input', () => {
-    accountNumber.value = accountNumber.value.replace(/\D/g, '').slice(0, 10);
-    // Reset state, then schedule verification
-    clearTimeout(verifyTimer);
-    accountName.value = '';
-    verifiedAccount = null;
-    bankSave.disabled = true;
-
-    if (accountNumber.value.length !== 10 || !bankSelect.value) {
-      verifyHint.textContent = 'Enter a 10-digit account number to verify.';
-      return;
-    }
-
-    verifyHint.textContent = 'Verifying…';
-    verifyTimer = setTimeout(verifyAccount, 350);
-  });
-
-  bankSelect.addEventListener('change', () => {
-    clearTimeout(verifyTimer);
-    accountName.value = '';
-    verifiedAccount = null;
-    bankSave.disabled = true;
-    if (accountNumber.value.length === 10 && bankSelect.value) {
-      verifyHint.textContent = 'Verifying…';
-      verifyTimer = setTimeout(verifyAccount, 200);
-    } else {
-      verifyHint.textContent = 'Enter a 10-digit account number to verify.';
-    }
-  });
-
-  async function verifyAccount() {
-    const num = accountNumber.value;
-    const bank = bankSelect.value;
-    if (num.length !== 10 || !bank) return;
-
-    const thisRequest = ++verifyRequestId;
-
-    try {
-      const r = await fetch('/api/paystack/verify-account?account_number=' + encodeURIComponent(num) + '&bank_code=' + encodeURIComponent(bank));
-      const data = await r.json();
-
-      // Ignore if a newer request has started
-      if (thisRequest !== verifyRequestId) return;
-
-      if (data.account_name) {
-        accountName.value = data.account_name;
-        verifiedAccount = { account_number: num, bank_code: bank, account_name: data.account_name };
-        verifyHint.textContent = '✓ Account verified';
-        bankSave.disabled = false;
-      } else {
-        accountName.value = '';
-        verifiedAccount = null;
-        verifyHint.textContent = data.error || 'Could not verify. Check details and try again.';
-        bankSave.disabled = true;
-      }
-    } catch {
-      if (thisRequest !== verifyRequestId) return;
-      accountName.value = '';
-      verifiedAccount = null;
-      verifyHint.textContent = 'Verification failed. Please try again.';
-      bankSave.disabled = true;
-    }
-  }
-
-  bankSave.addEventListener('click', async () => {
-    if (!verifiedAccount) return;
-    bankSave.disabled = true;
-    bankSave.textContent = 'Saving…';
-    try {
-      const r = await fetch('/api/me/subaccount', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          ...verifiedAccount,
-          date_of_birth: dobField.value || '2000-01-01'
-        })
-      });
-      const data = await r.json();
-      if (data.ok) {
-        alert('✓ Payments set up! You can now receive money for your sales.');
-        closeBankModal();
-        sellerBanner.classList.add('hidden');
-      } else {
-        alert(data.error || 'Could not save bank details');
-        bankSave.disabled = false;
-      }
-    } catch {
-      alert('Could not save. Please try again.');
-      bankSave.disabled = false;
-    } finally {
-      bankSave.textContent = 'Save';
-    }
-  });
-
-  // ═══════════════════════════════════════════════════
-  // INIT
-  // ═══════════════════════════════════════════════════
+  // ── INIT ──
   loadListings();
-  checkSellerSetup();
 })();

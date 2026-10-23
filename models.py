@@ -10,6 +10,7 @@ class User(db.Model):
     full_name = db.Column(db.String(120), nullable=False)
     email = db.Column(db.String(120), unique=True, nullable=False, index=True)
     phone = db.Column(db.String(20))
+    whatsapp_number = db.Column(db.String(20))
     password_hash = db.Column(db.String(255), nullable=False)
     role = db.Column(db.String(20), default='student')
     verification_status = db.Column(db.String(20), default='unverified')
@@ -30,7 +31,7 @@ class StudentVerification(db.Model):
     __tablename__ = 'student_verifications'
     id = db.Column(db.Integer, primary_key=True)
     user_id = db.Column(db.Integer, db.ForeignKey('users.id'), unique=True, nullable=False)
-    matric_no = db.Column(db.String(50), nullable=False, index=True)
+    matric_no = db.Column(db.String(50), nullable=False, unique=True)
     faculty = db.Column(db.String(120), nullable=False)
     department = db.Column(db.String(120), nullable=False)
     level = db.Column(db.String(10), nullable=False)
@@ -43,6 +44,10 @@ class StudentVerification(db.Model):
     submitted_at = db.Column(db.DateTime, default=datetime.utcnow)
     reviewed_at = db.Column(db.DateTime)
     reviewed_by = db.Column(db.Integer, db.ForeignKey('users.id'))
+
+    __table_args__ = (
+        db.Index('ix_sv_status_submitted', 'status', 'submitted_at'),
+    )
 
 
 class Post(db.Model):
@@ -111,7 +116,7 @@ class ChatMessage(db.Model):
     room_id = db.Column(db.Integer, db.ForeignKey('chat_rooms.id'), nullable=False)
     user_id = db.Column(db.Integer, db.ForeignKey('users.id'), nullable=False)
     content = db.Column(db.Text, nullable=False)
-    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+    created_at = db.Column(db.DateTime, default=datetime.utcnow, nullable=False)
 
     user = db.relationship('User')
 
@@ -127,14 +132,12 @@ class Listing(db.Model):
     image_path = db.Column(db.String(255))
     sold = db.Column(db.Boolean, default=False)
 
-    # Ad promotion fields
     featured = db.Column(db.Boolean, default=False, index=True)
     featured_until = db.Column(db.DateTime, index=True)
     featured_days = db.Column(db.Integer, default=0)
     featured_amount_paid = db.Column(db.Float, default=0)
     featured_last_payment_ref = db.Column(db.String(100))
 
-    # Sale tracking
     sold_at = db.Column(db.DateTime)
     buyer_id = db.Column(db.Integer, db.ForeignKey('users.id'))
     payment_reference = db.Column(db.String(100), index=True)
@@ -143,6 +146,24 @@ class Listing(db.Model):
 
     seller = db.relationship('User', foreign_keys=[user_id])
     buyer = db.relationship('User', foreign_keys=[buyer_id])
+
+
+class AdPayment(db.Model):
+    __tablename__ = 'ad_payments'
+    id = db.Column(db.Integer, primary_key=True)
+    listing_id = db.Column(db.Integer, db.ForeignKey('listings.id'), nullable=False)
+    user_id = db.Column(db.Integer, db.ForeignKey('users.id'), nullable=False)
+    days = db.Column(db.Integer, nullable=False)
+    amount = db.Column(db.Float, nullable=False)
+    status = db.Column(db.String(20), default='pending')
+    reference = db.Column(db.String(50), unique=True, nullable=False)
+    payer_note = db.Column(db.String(255))
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+    approved_at = db.Column(db.DateTime)
+    approved_by = db.Column(db.Integer, db.ForeignKey('users.id'))
+
+    listing = db.relationship('Listing', backref='ad_payments')
+    user = db.relationship('User', foreign_keys=[user_id])
 
 
 class Assignment(db.Model):
